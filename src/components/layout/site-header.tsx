@@ -8,20 +8,22 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 
 export function SiteHeader() {
   const { theme, setTheme } = useTheme();
-  const location = useLocation()
+  const location = useLocation();
 
   const getPageTitle = () => {
     switch (location.pathname) {
-      case "/":
-        return "홈"
-      case "/crawler-config":
-        return "크롤링 설정"
-      case "/notifications":
-        return "알림"
+      case '/':
+        return '홈';
+      case '/settings':
+        return '사용자 설정';
+      case '/alerts':
+        return '알림';
+      case '/about':
+        return '프로그램 정보';
       default:
-        return "업무 알림 시스템"
+        return '업무 알림 시스템';
     }
-  }
+  };
 
   return (
     <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">

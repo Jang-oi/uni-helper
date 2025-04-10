@@ -1,16 +1,21 @@
 {
   "name": "uni-helper-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Internal work monitoring application",
   "type": "module",
+  "main": "electron/main.mjs",
+  "homepage": ".",
   "scripts": {
-    "dev": "vite",
+    "test": "concurrently \"vite\" \"cross-env NODE_ENV=development electron .\"",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:test": "electron electron/main.js"
+    "electron:test": "electron electron/main.mjs"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-dialog": "^1.1.7",
     "@radix-ui/react-label": "^2.1.3",
     "@radix-ui/react-scroll-area": "^1.2.4",
@@ -23,16 +28,19 @@
     "@tailwindcss/vite": "^4.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-localshortcut": "^3.2.1",
     "electron-store": "^10.0.1",
     "lucide-react": "^0.487.0",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.55.0",
     "react-router-dom": "^7.5.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tailwindcss": "^4.1.3",
-    "tw-animate-css": "^1.2.5"
+    "tw-animate-css": "^1.2.5",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
@@ -41,6 +49,8 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react-swc": "^3.8.0",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "electron": "^35.1.4",
     "electron-builder": "^26.0.12",
     "eslint": "^9.21.0",
@@ -51,6 +61,18 @@
     "ts-node": "^10.9.2",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.yourcompany.workmonitor",
+    "productName": "Work Monitor",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": ["dist/**/*", "electron/**/*"],
+    "win": {
+      "target": "nsis"
+    }
   }
 }
