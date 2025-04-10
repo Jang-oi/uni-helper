@@ -91,9 +91,10 @@ export function SettingsPage() {
       };
 
       const result = await window.electron.invoke('test-connection', testSettings);
+      console.log(result);
       if (result.success) {
         toast.success('연결 테스트 성공', {
-          description: '업무 사이트에 성공적으로 연결되었습니다.',
+          description: result.message || '업무 사이트에 성공적으로 연결되었습니다.',
         });
       } else {
         toast.error('연결 테스트 실패', {

@@ -38,4 +38,8 @@ contextBridge.exposeInMainWorld("electron", {
         }
         return Promise.reject(new Error(`Invalid channel: ${channel}`))
     },
+    // 새로운 API
+    checkSession: () => ipcRenderer.invoke('check-session'),
+    manualCheck: () => ipcRenderer.invoke('manual-check'),
+    refreshSession: () => ipcRenderer.invoke('refresh-session')
 })
