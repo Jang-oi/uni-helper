@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray } from 'electron';
 import path from 'path';
 import { registerIpcHandlers, setMainWindow } from './ipc-handler.js';
 import { fileURLToPath } from 'url';
@@ -8,12 +8,13 @@ import electronLocalShortcut from 'electron-localshortcut';
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-let mainWindow;
+let mainWindow, tray;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, 'favicon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: true,
@@ -39,9 +40,37 @@ async function createWindow() {
   setMainWindow(mainWindow);
 }
 
+const createTray = () => {
+  tray = new Tray(path.join(__dirname, 'favicon.ico'));
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '재시작',
+      click: () => {
+        app.relaunch();
+        app.exit();
+      },
+    },
+    {
+      label: '종료',
+      click: () => {
+        app.isQuiting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setToolTip('uni-helper-app');
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    mainWindow.show();
+  });
+};
+
 app.whenReady().then(() => {
   // IPC 핸들러 등록
   registerIpcHandlers();
+  createTray();
   createWindow();
 
   app.on('activate', function () {

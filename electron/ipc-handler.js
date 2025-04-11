@@ -10,7 +10,9 @@ const __dirname = path.dirname(__filename);
 
 // 상수 정의
 const SUPPORT_URL = 'https://114.unipost.co.kr/home.uni';
-const SESSION_CHECK_INTERVAL = 4 * 60 * 60 * 1000; // 4시간
+const SESSION_CHECK_INTERVAL = 50 * 60 * 1000; // 50분 (사이트 세션 만료 시간 1시간보다 짧게)
+const BUSINESS_HOURS_START = 7; // 오전 7시
+const BUSINESS_HOURS_END = 20; // 오후 8시
 
 // 상태 관리
 const store = new Store();
@@ -18,6 +20,7 @@ let mainWindow, dataWindow;
 let isMonitoring = false;
 let monitoringInterval = null;
 let sessionCheckInterval = null;
+let businessHoursCheckInterval = null;
 let isLoggedIn = false;
 
 // 메인 윈도우 설정 함수
@@ -29,6 +32,86 @@ export function setMainWindow(window) {
 const openUniPost = async (srIdx) => {
   await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
 };
+
+// 현재 시간이 업무 시간인지 확인 (평일 07:00 ~ 20:00)
+function isBusinessHours() {
+  const now = new Date();
+  const hours = now.getHours();
+  const day = now.getDay(); // 0: 일요일, 6: 토요일
+
+  // 주말(토,일) 체크
+  if (day === 0 || day === 6) return false;
+
+  return hours >= BUSINESS_HOURS_START && hours < BUSINESS_HOURS_END;
+}
+
+// 업무 시간 체크 및 모니터링 상태 관리
+async function checkBusinessHours() {
+  const settings = store.get('settings') || {};
+  const businessHoursOnly = settings.businessHoursOnly !== false; // 기본값은 true
+
+  if (!businessHoursOnly) return true; // 업무 시간 제한이 꺼져 있으면 항상 true
+
+  const withinBusinessHours = isBusinessHours();
+
+  // 모니터링 중이고 업무 시간이 아닌 경우 모니터링 일시 중지
+  if (isMonitoring && !withinBusinessHours) {
+    console.log('업무 시간이 아니므로 모니터링 일시 중지');
+    await pauseMonitoring();
+  }
+  // 모니터링이 일시 중지되어 있고 업무 시간인 경우 모니터링 재개
+  else if (!isMonitoring && withinBusinessHours && store.get('monitoringPaused')) {
+    console.log('업무 시간이므로 모니터링 재개');
+    await resumeMonitoring();
+  }
+
+  return withinBusinessHours;
+}
+
+// 모니터링 일시 중지 (업무 시간 외)
+async function pauseMonitoring() {
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+  }
+
+  if (sessionCheckInterval) {
+    clearInterval(sessionCheckInterval);
+    sessionCheckInterval = null;
+  }
+
+  isMonitoring = false;
+  store.set('monitoringPaused', true); // 일시 중지 상태 저장
+
+  // 메인 윈도우에 상태 변경 알림
+  if (mainWindow) {
+    mainWindow.webContents.send('monitoring-status-changed', false);
+    mainWindow.webContents.send('business-hours-notification', '업무 시간(07:00~20:00)이 아니므로 모니터링이 일시 중지되었습니다.');
+  }
+}
+
+// 모니터링 재개 (업무 시간)
+async function resumeMonitoring() {
+  const settings = store.get('settings');
+  if (!settings) return;
+
+  // 모니터링 재개
+  const interval = settings.checkInterval * 60 * 1000;
+
+  // 세션 체크 재개
+  sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
+
+  // 모니터링 인터벌 재개
+  monitoringInterval = setInterval(checkForNewRequests, interval);
+  isMonitoring = true;
+  store.delete('monitoringPaused'); // 일시 중지 상태 제거
+
+  // 메인 윈도우에 상태 변경 알림
+  if (mainWindow) {
+    mainWindow.webContents.send('monitoring-status-changed', true);
+    mainWindow.webContents.send('business-hours-notification', '업무 시간이 시작되어 모니터링이 재개되었습니다.');
+  }
+}
 
 // 로그인 확인 함수
 async function ensureLoggedIn() {
@@ -152,6 +235,15 @@ async function checkLoginSession(window) {
 
 // 데이터 스크래핑 함수
 async function scrapeDataFromSite() {
+  // 업무 시간 체크
+  const settings = store.get('settings') || {};
+  const businessHoursOnly = settings.businessHoursOnly !== false;
+
+  if (businessHoursOnly && !isBusinessHours()) {
+    console.log('업무 시간이 아니므로 스크래핑 건너뜀');
+    return { success: false, message: '업무 시간이 아닙니다', data: [] };
+  }
+
   // 로그인 상태 확인 및 필요시 로그인
   const loggedIn = await ensureLoggedIn();
   if (!loggedIn) {
@@ -259,8 +351,25 @@ async function checkForNewRequests() {
         isNew: true,
       }));
 
+      // 앱 최초 실행 시 오늘 날짜 이후 데이터만 필터링
+      const isFirstRun = !store.has('alerts');
+      let filteredAlerts = alerts;
+
+      if (isFirstRun) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // 오늘 자정으로 설정
+
+        filteredAlerts = alerts.filter((alert) => {
+          // REQ_DATE_ALL 형식: "2023-04-11 14:30:00"
+          const alertDate = new Date(alert.REQ_DATE_ALL);
+          return alertDate >= today;
+        });
+
+        console.log(`최초 실행: 오늘(${today.toLocaleDateString()}) 이후 알림만 표시 (${filteredAlerts.length}/${alerts.length})`);
+      }
+
       // 새로운 알림만 필터링
-      const newAlerts = alerts.filter((alert) => !existingIds.has(alert.SR_IDX));
+      const newAlerts = filteredAlerts.filter((alert) => !existingIds.has(alert.SR_IDX));
 
       if (newAlerts.length > 0) {
         // 새 알림을 저장소에 추가
@@ -272,13 +381,26 @@ async function checkForNewRequests() {
             body: `💡 상태: ${alert.STATUS}\n🕒 요청 시간: ${alert.REQ_DATE_ALL}`,
           });
 
-          // 클릭하면 브라우저 열기
+          // 클릭하면 브라우저 열기 및 읽음 처리
           notification.on('click', () => {
             openUniPost(alert.SR_IDX);
+
+            // 알림 읽음 처리
+            const alerts = store.get('alerts') || [];
+            const updatedAlerts = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false, isRead: true } : a));
+            store.set('alerts', updatedAlerts);
+
+            // 메인 윈도우에 알림 상태 변경 알림
+            if (mainWindow) {
+              mainWindow.webContents.send('alert-marked-as-read', alert.SR_IDX);
+            }
           });
 
           // 알림 표시
           notification.show();
+
+          // 렌더러에 알림 전송
+          if (mainWindow) mainWindow.webContents.send('new-alert', alert);
         });
       }
 
@@ -292,15 +414,77 @@ async function checkForNewRequests() {
   }
 }
 
+// 모니터링 설정 업데이트
+async function updateMonitoringSettings() {
+  if (!isMonitoring) return { success: true, message: '모니터링이 실행 중이 아닙니다.' };
+
+  // 기존 인터벌 정리
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+  }
+
+  if (sessionCheckInterval) {
+    clearInterval(sessionCheckInterval);
+    sessionCheckInterval = null;
+  }
+
+  // 설정 가져오기
+  const settings = store.get('settings');
+  if (!settings || !settings.checkInterval) {
+    return { success: false, message: '설정 정보가 없습니다.' };
+  }
+
+  // 분을 밀리초로 변환
+  const interval = settings.checkInterval * 60 * 1000;
+
+  // 업무 시간 체크
+  const withinBusinessHours = await checkBusinessHours();
+  const businessHoursOnly = settings.businessHoursOnly !== false;
+
+  if (businessHoursOnly && !withinBusinessHours) {
+    // 업무 시간이 아니면 모니터링 일시 중지
+    await pauseMonitoring();
+    return { success: true, message: '업무 시간이 아니므로 모니터링이 일시 중지되었습니다.' };
+  }
+
+  // 세션 체크 인터벌 설정
+  sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
+
+  // 모니터링 인터벌 설정
+  monitoringInterval = setInterval(checkForNewRequests, interval);
+
+  return { success: true, message: '모니터링 설정이 업데이트되었습니다.' };
+}
+
 // 모니터링 시작 함수
 async function startMonitoring() {
   // 이미 실행 중인 인터벌 정리
   if (monitoringInterval) clearInterval(monitoringInterval);
+  if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+  if (businessHoursCheckInterval) clearInterval(businessHoursCheckInterval);
 
   // 설정 확인
   const settings = store.get('settings');
   if (!settings || !settings.checkInterval) {
     return { success: false, message: '설정 정보가 없습니다.' };
+  }
+
+  // 업무 시간 체크
+  const withinBusinessHours = await checkBusinessHours();
+  const businessHoursOnly = settings.businessHoursOnly !== false;
+
+  if (businessHoursOnly && !withinBusinessHours) {
+    // 업무 시간이 아니면 일시 중지 상태로 저장하고 다음 업무 시간에 자동 시작
+    store.set('monitoringPaused', true);
+
+    // 업무 시간 체크 인터벌 설정 (1분마다)
+    businessHoursCheckInterval = setInterval(checkBusinessHours, 60000);
+
+    return {
+      success: true,
+      message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 자동으로 시작됩니다.',
+    };
   }
 
   // 분을 밀리초로 변환
@@ -318,15 +502,28 @@ async function startMonitoring() {
   try {
     // 로그인 성공 시 첫 번째 데이터 체크 실행
     const initialCheck = await checkForNewRequests();
-    if (!initialCheck.success) return { success: false, message: `초기 데이터 확인 실패: ${initialCheck.message || initialCheck.error}` };
+    if (!initialCheck.success && initialCheck.message !== '업무 시간이 아닙니다') {
+      return { success: false, message: `초기 데이터 확인 실패: ${initialCheck.message || initialCheck.error}` };
+    }
 
     // 세션 만료 방지를 위한 주기적 체크
-    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-    sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
+    // sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
 
     // 데이터 모니터링 인터벌 설정
     monitoringInterval = setInterval(checkForNewRequests, interval);
+
+    // 업무 시간 체크 및 세션 유지를 위한 인터벌 설정 (50분마다)
+    businessHoursCheckInterval = setInterval(async () => {
+      const withinBusinessHours = await checkBusinessHours();
+
+      // 업무 시간 내에만 세션 체크 수행
+      if (withinBusinessHours) {
+        await ensureLoggedIn();
+      }
+    }, SESSION_CHECK_INTERVAL);
+
     isMonitoring = true;
+    store.delete('monitoringPaused'); // 일시 중지 상태 제거
 
     return { success: true, message: '모니터링이 시작되었습니다.' };
   } catch (error) {
@@ -347,7 +544,14 @@ function stopMonitoring() {
     sessionCheckInterval = null;
   }
 
+  if (businessHoursCheckInterval) {
+    clearInterval(businessHoursCheckInterval);
+    businessHoursCheckInterval = null;
+  }
+
   isMonitoring = false;
+  store.delete('monitoringPaused'); // 일시 중지 상태 제거
+
   return { success: true, message: '모니터링이 중지되었습니다.' };
 }
 
@@ -379,6 +583,11 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('get-monitoring-status', async () => {
     return isMonitoring;
+  });
+
+  // 모니터링 설정 업데이트 핸들러
+  ipcMain.handle('update-monitoring-settings', async () => {
+    return updateMonitoringSettings();
   });
 
   // 알림 관련 핸들러

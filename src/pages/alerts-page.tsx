@@ -23,11 +23,26 @@ interface AlertItem {
   isRead?: boolean;
 }
 
+// 상태에 따른 배지 스타일 결정
+function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  const statusLower = status.toLowerCase();
+
+  if (statusLower.includes('접수') || statusLower.includes('신규')) {
+    return 'default';
+  } else if (statusLower.includes('진행') || statusLower.includes('처리')) {
+    return 'secondary';
+  } else if (statusLower.includes('지연') || statusLower.includes('보류')) {
+    return 'destructive';
+  } else {
+    return 'outline';
+  }
+}
+
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('unread');
+  const [activeTab, setActiveTab] = useState('all');
 
   // 알림 목록 불러오기
   const loadAlerts = async () => {
@@ -55,8 +70,13 @@ export function AlertsPage() {
   useEffect(() => {
     loadAlerts();
 
+    // 알림 읽음 처리 이벤트 리스너 등록
+    const removeAlertMarkedAsReadListener = window.electron.on('alert-marked-as-read', (srIdx: string) => {
+      setAlerts((prev) => prev.map((alert) => (alert.SR_IDX === srIdx ? { ...alert, isNew: false, isRead: true } : alert)));
+    });
+
     // 새 알림 이벤트 리스너 등록
-    const removeNewAlertListener = window.electron.on('new-alert', (alert: AlertItem) => {
+    const removeNewAlertListener = window.electron?.on('new-alert', (alert: AlertItem) => {
       setAlerts((prev) => [alert, ...prev]);
       toast.info(`새 요청: ${alert.REQ_TITLE}`, {
         description: `${alert.CN_NAME} - ${alert.STATUS}`,
@@ -65,6 +85,7 @@ export function AlertsPage() {
 
     return () => {
       if (removeNewAlertListener) removeNewAlertListener();
+      if (removeAlertMarkedAsReadListener) removeAlertMarkedAsReadListener();
     };
   }, []);
 
@@ -157,7 +178,7 @@ export function AlertsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="unread" value={activeTab} onValueChange={setActiveTab} className="mb-4">
+          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="mb-4">
             <TabsList>
               <TabsTrigger value="all">전체 ({alerts.length})</TabsTrigger>
               <TabsTrigger value="unread">읽지 않음 ({unreadCount})</TabsTrigger>
@@ -232,19 +253,4 @@ export function AlertsPage() {
       </Card>
     </div>
   );
-}
-
-// 상태에 따른 배지 스타일 결정
-function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  const statusLower = status.toLowerCase();
-
-  if (statusLower.includes('접수') || statusLower.includes('신규')) {
-    return 'default';
-  } else if (statusLower.includes('진행') || statusLower.includes('처리')) {
-    return 'secondary';
-  } else if (statusLower.includes('지연') || statusLower.includes('보류')) {
-    return 'destructive';
-  } else {
-    return 'outline';
-  }
 }

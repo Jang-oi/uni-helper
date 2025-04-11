@@ -9,6 +9,7 @@ const validChannels = [
     // 모니터링 관련
     "toggle-monitoring",
     "get-monitoring-status",
+    "update-monitoring-settings",
 
     // 알림 관련
     "get-alerts",
@@ -18,11 +19,18 @@ const validChannels = [
     "test-login",
     "login-error",
 
+    // 데이터 관련
     "scraping-error",
+    "new-alert",
 
+    // 알림 상태 관련
     "mark-alert-as-read",
     "mark-all-alerts-as-read",
     "open-request",
+
+    // 업무 시간 관련
+    "monitoring-status-changed",
+    "business-hours-notification"
 ]
 
 // Expose protected methods that allow the renderer process to use
