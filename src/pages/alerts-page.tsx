@@ -1,26 +1,35 @@
 import { useEffect, useState } from 'react';
 
-import { Bell, Clock, RefreshCw } from 'lucide-react';
+import { Bell, CheckCircle, Clock, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+// 알림 아이템 인터페이스
 interface AlertItem {
-  id: string;
-  title: string;
-  status: string;
-  timestamp: string;
+  SR_IDX: string;
+  REQ_TITLE: string;
+  CN_NAME: string;
+  STATUS: string;
+  WRITER: string;
+  REQ_DATE: string;
+  REQ_DATE_ALL: string;
   isNew: boolean;
+  isRead?: boolean;
 }
 
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('unread');
 
+  // 알림 목록 불러오기
   const loadAlerts = async () => {
     setIsLoading(true);
     try {
@@ -42,24 +51,81 @@ export function AlertsPage() {
     }
   };
 
+  // 초기 로드
   useEffect(() => {
     loadAlerts();
+
+    // 새 알림 이벤트 리스너 등록
+    const removeNewAlertListener = window.electron.on('new-alert', (alert: AlertItem) => {
+      setAlerts((prev) => [alert, ...prev]);
+      toast.info(`새 요청: ${alert.REQ_TITLE}`, {
+        description: `${alert.CN_NAME} - ${alert.STATUS}`,
+      });
+    });
+
+    return () => {
+      if (removeNewAlertListener) removeNewAlertListener();
+    };
   }, []);
 
-  const clearAlerts = async () => {
+  // 알림 읽음 표시
+  const markAsRead = async (srIdx: string) => {
     try {
       if (!window.electron) {
         toast.error('Electron API not available');
         return;
       }
 
-      await window.electron.invoke('clear-alerts');
-      setAlerts([]);
-      toast.success('알림 내역이 삭제되었습니다');
+      await window.electron.invoke('mark-alert-as-read', srIdx);
+
+      // 로컬 상태 업데이트
+      setAlerts((prev) => prev.map((alert) => (alert.SR_IDX === srIdx ? { ...alert, isNew: false, isRead: true } : alert)));
     } catch (error) {
-      toast.error('알림 삭제 실패');
+      toast.error('알림 상태 변경 실패');
     }
   };
+
+  // 모든 알림 읽음 표시
+  const markAllAsRead = async () => {
+    try {
+      if (!window.electron) {
+        toast.error('Electron API not available');
+        return;
+      }
+
+      await window.electron.invoke('mark-all-alerts-as-read');
+
+      // 로컬 상태 업데이트
+      setAlerts((prev) => prev.map((alert) => ({ ...alert, isNew: false, isRead: true })));
+
+      toast.success('모든 알림을 읽음으로 표시했습니다');
+    } catch (error) {
+      toast.error('알림 상태 변경 실패');
+    }
+  };
+
+  // 요청 상세 보기
+  const viewRequest = (srIdx: string) => {
+    if (!window.electron) {
+      toast.error('Electron API not available');
+      return;
+    }
+
+    window.electron.invoke('open-request', srIdx);
+
+    // 읽음 표시도 함께 처리
+    markAsRead(srIdx);
+  };
+
+  // 필터링된 알림 목록
+  const filteredAlerts = alerts.filter((alert) => {
+    if (activeTab === 'all') return true;
+    if (activeTab === 'unread') return alert.isNew && !alert.isRead;
+    return false;
+  });
+
+  // 읽지 않은 알림 개수
+  const unreadCount = alerts.filter((alert) => alert.isNew && !alert.isRead).length;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -69,6 +135,11 @@ export function AlertsPage() {
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5" />
               알림 내역
+              {unreadCount > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {unreadCount}
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>{lastChecked ? `마지막 확인: ${lastChecked}` : '아직 확인된 내역이 없습니다'}</CardDescription>
           </div>
@@ -77,26 +148,80 @@ export function AlertsPage() {
               <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
               새로고침
             </Button>
-            <Button variant="outline" size="sm" onClick={clearAlerts}>
-              알림 삭제
-            </Button>
+            {unreadCount > 0 && (
+              <Button variant="outline" size="sm" onClick={markAllAsRead}>
+                <CheckCircle className="h-4 w-4 mr-1" />
+                모두 읽음 표시
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
-          {alerts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">알림 내역이 없습니다</div>
+          <Tabs defaultValue="unread" value={activeTab} onValueChange={setActiveTab} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="all">전체 ({alerts.length})</TabsTrigger>
+              <TabsTrigger value="unread">읽지 않음 ({unreadCount})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {filteredAlerts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {activeTab === 'unread' ? '읽지 않은 알림이 없습니다' : '알림 내역이 없습니다'}
+            </div>
           ) : (
             <ScrollArea className="h-[400px]">
               <div className="space-y-4">
-                {alerts.map((alert) => (
-                  <div key={alert.id} className={`p-4 border rounded-lg ${alert.isNew ? 'bg-muted' : ''}`}>
+                {filteredAlerts.map((alert) => (
+                  <div
+                    key={alert.SR_IDX}
+                    className={`p-4 border rounded-lg transition-colors ${
+                      alert.isNew && !alert.isRead ? 'bg-muted border-primary/20' : ''
+                    }`}
+                  >
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium">{alert.title}</h3>
-                      <Badge variant={alert.isNew ? 'default' : 'outline'}>{alert.status}</Badge>
+                      <h3 className="font-medium flex items-center gap-2">
+                        {alert.isNew && !alert.isRead && <span className="w-2 h-2 bg-primary rounded-full" aria-hidden="true" />}
+                        <span>
+                          {alert.CN_NAME} - {alert.REQ_TITLE}
+                        </span>
+                      </h3>
+                      <Badge variant={getStatusVariant(alert.STATUS)}>{alert.STATUS}</Badge>
                     </div>
-                    <div className="flex items-center text-sm text-muted-foreground">
+                    <div className="flex items-center text-sm text-muted-foreground mb-3">
                       <Clock className="h-3 w-3 mr-1" />
-                      {alert.timestamp}
+                      {alert.REQ_DATE_ALL}
+                      <span className="mx-2">•</span>
+                      <span>{alert.WRITER}</span>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-2">
+                      {alert.isNew && !alert.isRead && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={() => markAsRead(alert.SR_IDX)}>
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                읽음
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>읽음으로 표시</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" onClick={() => viewRequest(alert.SR_IDX)}>
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              접수건 보기
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>업무 사이트에서 접수건 상세 보기</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </div>
                 ))}
@@ -107,4 +232,19 @@ export function AlertsPage() {
       </Card>
     </div>
   );
+}
+
+// 상태에 따른 배지 스타일 결정
+function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  const statusLower = status.toLowerCase();
+
+  if (statusLower.includes('접수') || statusLower.includes('신규')) {
+    return 'default';
+  } else if (statusLower.includes('진행') || statusLower.includes('처리')) {
+    return 'secondary';
+  } else if (statusLower.includes('지연') || statusLower.includes('보류')) {
+    return 'destructive';
+  } else {
+    return 'outline';
+  }
 }

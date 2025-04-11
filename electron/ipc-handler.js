@@ -26,9 +26,8 @@ export function setMainWindow(window) {
 }
 
 // 외부 링크 열기
-const openUniPost = (srIdx) => {
-  console.log(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
-  shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
+const openUniPost = async (srIdx) => {
+  await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
 };
 
 // 로그인 확인 함수
@@ -161,7 +160,7 @@ async function scrapeDataFromSite() {
   }
 
   dataWindow = new BrowserWindow({
-    show: true,
+    show: false,
     width: 1200,
     height: 800,
     webPreferences: {
@@ -246,12 +245,13 @@ async function checkForNewRequests() {
     if (data.length > 0) {
       // 이전 데이터와 비교하여 새로운 항목 확인
       const existingAlerts = store.get('alerts') || [];
-      const existingIds = new Set(existingAlerts.map((alert) => alert.id));
+      const existingIds = new Set(existingAlerts.map((alert) => alert.SR_IDX));
 
       // 각 데이터 항목을 알림으로 변환
       const alerts = data.map((item) => ({
         SR_IDX: item['SR_IDX'],
         REQ_TITLE: item['REQ_TITLE'],
+        CN_NAME: item['CN_NAME'],
         STATUS: item['STATUS'],
         WRITER: item['WRITER'],
         REQ_DATE: item['REQ_DATE'],
@@ -260,16 +260,15 @@ async function checkForNewRequests() {
       }));
 
       // 새로운 알림만 필터링
-      const newAlerts = alerts.filter((alert) => !existingIds.has(alert.id));
+      const newAlerts = alerts.filter((alert) => !existingIds.has(alert.SR_IDX));
 
-      const resultAlerts = newAlerts.filter((newAlert) => newAlert['WRITER'] === '');
-      if (resultAlerts.length > 0) {
+      if (newAlerts.length > 0) {
         // 새 알림을 저장소에 추가
-        store.set('alerts', [...resultAlerts, ...newAlerts, ...existingAlerts]);
+        store.set('alerts', [...newAlerts, ...existingAlerts]);
 
-        resultAlerts.forEach((alert) => {
+        newAlerts.forEach((alert) => {
           const notification = new Notification({
-            title: `📬 새 요청 도착! - ${alert.REQ_TITLE}`,
+            title: `📬 ${alert.REQ_TITLE}`,
             body: `💡 상태: ${alert.STATUS}\n🕒 요청 시간: ${alert.REQ_DATE_ALL}`,
           });
 
@@ -283,7 +282,7 @@ async function checkForNewRequests() {
         });
       }
 
-      return { success: true, newAlerts: resultAlerts.length };
+      return { success: true, newAlerts: newAlerts.length };
     }
 
     return { success: true, newAlerts: 0 };
@@ -311,23 +310,18 @@ async function startMonitoring() {
   const loggedIn = await ensureLoggedIn();
   if (!loggedIn) {
     console.error('모니터링 시작 실패: 로그인할 수 없습니다');
-    if (mainWindow) {
-      mainWindow.webContents.send('login-error', '모니터링을 시작할 수 없습니다. 로그인 정보를 확인해주세요.');
-    }
+    if (mainWindow) mainWindow.webContents.send('login-error', '모니터링을 시작할 수 없습니다. 로그인 정보를 확인해주세요.');
+
     return { success: false, message: '로그인할 수 없습니다. 아이디와 비밀번호를 확인해주세요.' };
   }
 
   try {
     // 로그인 성공 시 첫 번째 데이터 체크 실행
     const initialCheck = await checkForNewRequests();
-    if (!initialCheck.success) {
-      return { success: false, message: `초기 데이터 확인 실패: ${initialCheck.message || initialCheck.error}` };
-    }
+    if (!initialCheck.success) return { success: false, message: `초기 데이터 확인 실패: ${initialCheck.message || initialCheck.error}` };
 
     // 세션 만료 방지를 위한 주기적 체크
-    if (sessionCheckInterval) {
-      clearInterval(sessionCheckInterval);
-    }
+    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
     sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
 
     // 데이터 모니터링 인터벌 설정
@@ -412,6 +406,45 @@ export function registerIpcHandlers() {
       return { success: result, message: result ? '로그인 성공' : '로그인 실패' };
     } catch (error) {
       console.error('로그인 테스트 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  // 알림 읽음 표시 핸들러
+  ipcMain.handle('mark-alert-as-read', async (event, srIdx) => {
+    try {
+      const alerts = store.get('alerts') || [];
+      const updatedAlerts = alerts.map((alert) => (alert.SR_IDX === srIdx ? { ...alert, isNew: false, isRead: true } : alert));
+
+      store.set('alerts', updatedAlerts);
+      return { success: true };
+    } catch (error) {
+      console.error('알림 상태 변경 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  // 모든 알림 읽음 표시 핸들러
+  ipcMain.handle('mark-all-alerts-as-read', async () => {
+    try {
+      const alerts = store.get('alerts') || [];
+      const updatedAlerts = alerts.map((alert) => ({ ...alert, isNew: false, isRead: true }));
+
+      store.set('alerts', updatedAlerts);
+      return { success: true };
+    } catch (error) {
+      console.error('알림 상태 변경 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  // 요청 상세 보기 핸들러
+  ipcMain.handle('open-request', async (event, srIdx) => {
+    try {
+      await openUniPost(srIdx);
+      return { success: true };
+    } catch (error) {
+      console.error('요청 상세 보기 중 오류:', error);
       return { success: false, message: error.toString() };
     }
   });

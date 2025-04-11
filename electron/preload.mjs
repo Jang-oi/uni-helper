@@ -18,7 +18,11 @@ const validChannels = [
     "test-login",
     "login-error",
 
-    "scraping-error"
+    "scraping-error",
+
+    "mark-alert-as-read",
+    "mark-all-alerts-as-read",
+    "open-request",
 ]
 
 // Expose protected methods that allow the renderer process to use
