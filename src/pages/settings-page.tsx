@@ -19,7 +19,6 @@ const formSchema = z.object({
 type SettingsFormValues = z.infer<typeof formSchema>;
 
 export function SettingsPage() {
-  const [isTesting, setIsTesting] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
 
   const form = useForm<SettingsFormValues>({
@@ -62,10 +61,7 @@ export function SettingsPage() {
       }
 
       // 고정 URL 추가
-      const settingsWithUrl = {
-        ...values,
-        workSiteUrl: 'https://114.unipost.co.kr',
-      };
+      const settingsWithUrl = { ...values };
 
       await window.electron.invoke('save-settings', settingsWithUrl);
       toast.success('설정이 저장되었습니다');
@@ -73,41 +69,6 @@ export function SettingsPage() {
       toast.error('설정 저장 실패', {
         description: '설정을 저장하는 중 오류가 발생했습니다.',
       });
-    }
-  }
-
-  async function testConnection() {
-    setIsTesting(true);
-    try {
-      if (!window.electron) {
-        toast.error('Electron API not available');
-        return;
-      }
-
-      // 고정 URL 추가
-      const testSettings = {
-        ...form.getValues(),
-        workSiteUrl: 'https://114.unipost.co.kr',
-      };
-
-      const result = await window.electron.invoke('test-connection', testSettings);
-      console.log(result);
-      if (result.success) {
-        toast.success('연결 테스트 성공', {
-          description: result.message || '업무 사이트에 성공적으로 연결되었습니다.',
-        });
-      } else {
-        toast.error('연결 테스트 실패', {
-          description: result.message || '업무 사이트에 연결할 수 없습니다.',
-        });
-      }
-    } catch (error) {
-      console.error('Test connection error:', error);
-      toast.error('연결 테스트 실패', {
-        description: '업무 사이트에 연결할 수 없습니다.',
-      });
-    } finally {
-      setIsTesting(false);
     }
   }
 
@@ -119,7 +80,8 @@ export function SettingsPage() {
       }
 
       const newStatus = !isMonitoring;
-      await window.electron.invoke('toggle-monitoring', newStatus);
+      const result = await window.electron.invoke('toggle-monitoring', newStatus);
+      console.log(result);
       setIsMonitoring(newStatus);
 
       if (newStatus) {
@@ -206,9 +168,6 @@ export function SettingsPage() {
                 )}
               />
               <div className="flex justify-between pt-4">
-                <Button type="button" variant="outline" onClick={testConnection} disabled={isTesting}>
-                  {isTesting ? '테스트 중...' : '연결 테스트'}
-                </Button>
                 <div className="space-x-2">
                   <Button type="submit">설정 저장</Button>
                   <Button type="button" variant={isMonitoring ? 'destructive' : 'default'} onClick={toggleMonitoring}>

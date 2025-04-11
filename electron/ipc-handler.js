@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, Notification, session, shell } from 'electron';
+import electronLocalShortcut from 'electron-localshortcut';
 import Store from 'electron-store';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const store = new Store();
-let mainWindow;
+const supportUrl = 'https://114.unipost.co.kr/home.uni';
+let mainWindow, dataWindow;
 let isMonitoring = false;
 let monitoringInterval = null;
 let sessionCheckInterval = null;
@@ -19,7 +21,7 @@ export function setMainWindow(window) {
   mainWindow = window;
 }
 const openUniPost = () => {
-  shell.openExternal('https://114.unipost.co.kr/home.uni');
+  shell.openExternal('https://114.unipost.co.kr/home.uni?access=list&srIdx=20250404340');
 };
 
 // 로그인 확인 함수
@@ -27,12 +29,12 @@ async function ensureLoggedIn() {
   if (isLoggedIn) return true;
 
   const settings = store.get('settings');
-  if (!settings || !settings.username || !settings.password || !settings.workSiteUrl) {
+  if (!settings || !settings.username || !settings.password) {
     return false;
   }
 
   try {
-    const result = await performLogin(settings.workSiteUrl, settings.username, settings.password);
+    const result = await performLogin(settings.username, settings.password);
     isLoggedIn = result.success;
     return isLoggedIn;
   } catch (error) {
@@ -42,7 +44,7 @@ async function ensureLoggedIn() {
 }
 
 // 로그인 수행 함수
-async function performLogin(url, username, password) {
+async function performLogin(username, password) {
   const loginWindow = new BrowserWindow({
     show: process.env.NODE_ENV === 'development',
     width: 1200,
@@ -55,14 +57,14 @@ async function performLogin(url, username, password) {
   });
 
   try {
-    await loginWindow.loadURL(url);
+    await loginWindow.loadURL(supportUrl);
 
     // 로그인 페이지 확인 및 로그인 시도
     const loginResult = await loginWindow.webContents.executeJavaScript(`
       (function() {
         try {
           const usernameField = document.querySelector("#userId");
-          const passwordField = document.querySelector("#password");
+          const passwordField = document.querySelector("#passworda");
           const loginButton = document.querySelector("body > div.wrap.login > div > div > div > div > form > fieldset > div.btn-area > button");
           
           if (!usernameField || !passwordField || !loginButton) {
@@ -83,16 +85,16 @@ async function performLogin(url, username, password) {
     if (!loginResult.success) return loginResult;
 
     // 로그인 성공 여부 확인 (대기 시간)
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // 로그인 후 상태 확인
     return await checkLoginSession(loginWindow);
   } catch (error) {
     return { success: false, message: error.toString() };
   } finally {
-    if (!loginWindow.isDestroyed()) {
+    /*    if (!loginWindow.isDestroyed()) {
       loginWindow.close();
-    }
+    }*/
   }
 }
 
@@ -100,39 +102,30 @@ async function performLogin(url, username, password) {
 async function checkLoginSession(window) {
   try {
     // iframe 내 로그인 상태 확인
-    return await window.webContents.executeJavaScript(`
+    const checkLogin = await window.webContents.executeJavaScript(`
     (function() {
       try {
-        // iframe 요소 찾기
-        const iframe = document.getElementById('ui-tabs-TM902313') || 
-                      document.querySelector('iframe[role="tabpanel"]');
-        
-        if (!iframe || !iframe.contentDocument) {
-          return { success: false, message: "iframe을 찾을 수 없거나 접근할 수 없습니다" };
-        }
-        
-        // iframe 내부에서 요소 검색
-        const successEl = iframe.contentDocument.querySelector('.rg-header table tbody .rg-header-renderer');
         const errorEl = iframe.contentDocument.querySelector('.up-alarm-box .up-alarm-message');
-        
-        if (successEl) {
-          return { success: true, message: "로그인 성공" };
-        } else if (errorEl && getComputedStyle(document.querySelector("#up-alarm")).display === "block") {
-          return { success: false, message: errorEl.textContent.trim() || "로그인 실패" };
-        } else {
-          // 디버깅 정보 수집
-          const iframeContent = iframe.contentDocument.documentElement.outerHTML.substring(0, 500);
-          return { 
-            success: false, 
-            message: "로그인 상태 확인 불가", 
-            debug: "iframe 내용 일부: " + iframeContent
-          };
+        if (errorEl && getComputedStyle(document.querySelector("#up-alarm")).display === "block") {
+            return { success: false, message: errorEl.textContent.trim() || "로그인 실패" };
         }
+        
+        const li = document.querySelector('li[title="요청내역관리"], li[name="요청내역관리"]');
+        const tabId = li?.getAttribute('aria-controls');
+        const iframe = document.getElementById(tabId);
+        
+        if (!iframe || !iframe.contentWindow)   return { success: false, message: "iframe을 찾을 수 없습니다" };
+        
+        return { success: true, message: "로그인 성공" };
+        
       } catch (error) {
         return { success: false, message: "상태 확인 오류: " + error.message };
       }
     })();
   `);
+
+    console.log(checkLogin);
+    return checkLogin;
   } catch (error) {
     return { success: false, message: '세션 확인 중 오류: ' + error.toString() };
   }
@@ -147,8 +140,7 @@ async function scrapeDataFromSite() {
     return [];
   }
 
-  console.log(loggedIn);
-  const dataWindow = new BrowserWindow({
+  dataWindow = new BrowserWindow({
     show: process.env.NODE_ENV === 'development',
     width: 1200,
     height: 800,
@@ -160,40 +152,29 @@ async function scrapeDataFromSite() {
   });
 
   try {
-    await dataWindow.loadURL('https://114.unipost.co.kr/home.uni');
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await dataWindow.loadURL(supportUrl);
+
+    electronLocalShortcut.register(dataWindow, 'F5', () => {
+      dataWindow.reload();
+    });
+
+    electronLocalShortcut.register(dataWindow, 'F12', () => {
+      dataWindow.webContents.openDevTools({ mode: 'detach' });
+    });
+
+    // await new Promise((resolve) => setTimeout(resolve, 5000));
     // iframe 내 데이터 스크래핑
     const data = await dataWindow.webContents.executeJavaScript(`
       (function() {
             try {
-              const iframe = document.getElementById('ui-tabs-TM902313') || document.querySelector('iframe[role="tabpanel"]');
+              const li = document.querySelector('li[title="요청내역관리"], li[name="요청내역관리"]');
+              const tabId = li?.getAttribute('aria-controls');
+              const iframe = document.getElementById(tabId);
               
-              if (!iframe || !iframe.contentDocument)   return { success: false, message: "iframe을 찾을 수 없습니다" };
+              if (!iframe || !iframe.contentWindow)   return { success: false, message: "iframe을 찾을 수 없습니다" };
+              const gridData = iframe.contentWindow.grid.getAllRowValue();
               
-              const doc = iframe.contentDocument;
-              
-              // 1. 헤더 키 추출
-              const headerCells = doc.querySelectorAll('.rg-header table tbody .rg-header-renderer');
-              const headers = Array.from(headerCells).map(cell => cell.textContent.trim());
-              
-              // 2. 바디 데이터 추출
-              const rows = doc.querySelectorAll('.rg-body table tbody tr');
-              const result = [];
-              
-              rows.forEach(tr => {
-                const tds = tr.querySelectorAll('td');
-                const rowData = {};
-                
-                tds.forEach((td, index) => {
-                  const text = td.querySelector('.rg-renderer')?.textContent.trim() || '';
-                  const key = headers[index] || \`컬럼\${index + 1}\`;
-                  rowData[key] = text;
-                });
-                
-                result.push(rowData);
-              });
-              
-              return { success: true, data: result };
+              return { success: true, data: gridData };
             } catch (error) {
               return { success: false, message: "데이터 스크래핑 오류: " + error.message };
             }
@@ -229,7 +210,8 @@ async function checkForNewRequests() {
     // 마지막 확인 시간 업데이트
     store.set('lastChecked', nowString);
 
-    if (data.length > 0) {
+    console.log(data);
+    /*if (data.length > 0) {
       // 이전 데이터와 비교하여 새로운 항목 확인
       const existingAlerts = store.get('alerts') || [];
       const existingIds = new Set(existingAlerts.map((alert) => alert.id));
@@ -244,8 +226,7 @@ async function checkForNewRequests() {
       }));
 
       // 새로운 알림만 필터링
-      // 새로운 알림만 필터링
-      const newAlerts = alerts.filter((alert) => !existingIds.has(alert.id) && (!alert.status || alert.status.trim() === '고객사답변'));
+      const newAlerts = alerts.filter((alert) => !existingIds.has(alert.id));
 
       console.log(newAlerts);
       if (newAlerts.length > 0) {
@@ -267,14 +248,12 @@ async function checkForNewRequests() {
           notification.show();
 
           // 렌더러에 알림 전송
-          if (mainWindow) {
-            mainWindow.webContents.send('new-alert', alert);
-          }
+          if (mainWindow) mainWindow.webContents.send('new-alert', alert);
         });
       }
 
       return { success: true, newAlerts: newAlerts.length };
-    }
+    }*/
 
     return { success: true, newAlerts: 0 };
   } catch (error) {
@@ -299,10 +278,7 @@ function startMonitoring() {
       await checkForNewRequests();
     } else {
       console.error('모니터링 시작 실패: 로그인할 수 없습니다');
-
-      if (mainWindow) {
-        mainWindow.webContents.send('login-error', '모니터링을 시작할 수 없습니다. 로그인 정보를 확인해주세요.');
-      }
+      if (mainWindow) mainWindow.webContents.send('login-error', '모니터링을 시작할 수 없습니다. 로그인 정보를 확인해주세요.');
     }
   });
 
@@ -340,11 +316,6 @@ function stopMonitoring() {
   return { success: true };
 }
 
-// 세션 상태 초기화 함수
-export function resetSessionState() {
-  isLoggedIn = false;
-}
-
 // IPC 핸들러 등록
 export function registerIpcHandlers() {
   // 기존 IPC 핸들러
@@ -355,108 +326,6 @@ export function registerIpcHandlers() {
   ipcMain.handle('save-settings', async (event, settings) => {
     store.set('settings', settings);
     return { success: true };
-  });
-
-  ipcMain.handle('test-connection', async (event, settings) => {
-    const { workSiteUrl, username, password } = settings;
-    const testSession = session.fromPartition('test-partition');
-    await testSession.clearStorageData();
-
-    const testWindow = new BrowserWindow({
-      show: process.env.NODE_ENV === 'development',
-      width: 1200,
-      height: 800,
-      webPreferences: {
-        session: testSession,
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-    });
-
-    try {
-      await testWindow.loadURL(workSiteUrl);
-
-      // 디버깅을 위해 개발자 도구 열기
-      if (process.env.NODE_ENV === 'development') {
-        testWindow.webContents.openDevTools({ mode: 'detach' });
-      }
-
-      // 페이지 로드 완료까지 대기
-      await new Promise((resolve) => testWindow.webContents.once('did-finish-load', resolve));
-
-      // 값 이스케이프 처리
-      const escapedUsername = username.replace(/"/g, '\\"');
-      const escapedPassword = password.replace(/"/g, '\\"');
-
-      await testWindow.webContents.executeJavaScript(`
-        (function() {
-          try {
-            const usernameField = document.querySelector("#userId");
-            const passwordField = document.querySelector("#password");
-            const loginButton = document.querySelector("body > div.wrap.login > div > div > div > div > form > fieldset > div.btn-area > button");
-            
-            if (!usernameField || !passwordField || !loginButton) {
-              return "로그인 요소 탐색 실패";
-            }
-            
-            usernameField.value = "${escapedUsername}";
-            passwordField.value = "${escapedPassword}";
-            loginButton.click();
-            
-            return "로그인 시도 완료";
-          } catch (error) {
-            return "스크립트 실행 오류: " + error.message;
-          }
-        })();
-      `);
-
-      // 로그인 시도 후 결과 확인 (간단하게)
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5초 대기
-
-      return await testWindow.webContents.executeJavaScript(`
-    (function() {
-      try {
-        // iframe 요소 찾기
-        const iframe = document.getElementById('ui-tabs-TM902313') || 
-                      document.querySelector('iframe[role="tabpanel"]');
-        
-        if (!iframe || !iframe.contentDocument) {
-          return { success: false, message: "iframe을 찾을 수 없거나 접근할 수 없습니다" };
-        }
-        
-        // iframe 내부에서 요소 검색
-        const successEl = iframe.contentDocument.querySelector('.rg-header table tbody .rg-header-renderer');
-        const errorEl = iframe.contentDocument.querySelector('.up-alarm-box .up-alarm-message');
-        
-        if (successEl) {
-          return { success: true, message: "로그인 성공" };
-        } else if (errorEl && getComputedStyle(document.querySelector("#up-alarm")).display === "block") {
-          return { success: false, message: errorEl.textContent.trim() || "로그인 실패" };
-        } else {
-          // 디버깅 정보 수집
-          const iframeContent = iframe.contentDocument.documentElement.outerHTML.substring(0, 500);
-          return { 
-            success: false, 
-            message: "로그인 상태 확인 불가", 
-            debug: "iframe 내용 일부: " + iframeContent
-          };
-        }
-      } catch (error) {
-        return { success: false, message: "상태 확인 오류: " + error.message };
-      }
-    })();
-  `);
-    } catch (error) {
-      console.error('로그인 테스트 오류:', error);
-      return {
-        success: false,
-        message: error.toString(),
-      };
-    } finally {
-      if (!testWindow.isDestroyed()) {
-        testWindow.close();
-      }
-    }
   });
 
   ipcMain.handle('toggle-monitoring', async (event, status) => {
@@ -481,20 +350,5 @@ export function registerIpcHandlers() {
   ipcMain.handle('clear-alerts', async () => {
     store.set('alerts', []);
     return { success: true };
-  });
-
-  // 새로운 IPC 핸들러
-  ipcMain.handle('check-session', async () => {
-    return { isLoggedIn: isLoggedIn };
-  });
-
-  ipcMain.handle('manual-check', async () => {
-    return await checkForNewRequests();
-  });
-
-  ipcMain.handle('refresh-session', async () => {
-    isLoggedIn = false;
-    const result = await ensureLoggedIn();
-    return { success: result };
   });
 }

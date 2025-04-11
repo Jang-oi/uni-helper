@@ -24,14 +24,8 @@ async function createWindow() {
     center         : true,
   });
 
-  // In development, load from Vite dev server
-  if (process.env.NODE_ENV === "development") {
-    await mainWindow.loadURL("http://localhost:5173")
-    mainWindow.webContents.openDevTools()
-  } else {
-    // In production, load the built app
-    await mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
-  }
+  if (process.env.NODE_ENV === "development") await mainWindow.loadURL("http://localhost:5173")
+  else await mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
 
   electronLocalShortcut.register(mainWindow, 'F5', () => {
     mainWindow.reload();
@@ -43,11 +37,6 @@ async function createWindow() {
 
   // 메인 윈도우 참조 설정
   setMainWindow(mainWindow);
-
-  // 개발 환경에서는 개발자 도구 열기
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
 }
 
 app.whenReady().then(() => {
