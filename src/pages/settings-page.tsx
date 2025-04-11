@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -20,6 +22,8 @@ type SettingsFormValues = z.infer<typeof formSchema>;
 
 export function SettingsPage() {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(formSchema),
@@ -60,15 +64,28 @@ export function SettingsPage() {
         return;
       }
 
-      // 고정 URL 추가
-      const settingsWithUrl = { ...values };
+      setIsLoading(true);
+      setLoginError(null);
 
-      await window.electron.invoke('save-settings', settingsWithUrl);
-      toast.success('설정이 저장되었습니다');
+      await window.electron.invoke('save-settings', values);
+
+      // 설정 저장 후 로그인 테스트
+      const loginTest = await window.electron.invoke('test-login');
+
+      if (!loginTest.success) {
+        setLoginError('로그인 테스트 실패: 아이디와 비밀번호를 확인해주세요.');
+        toast.error('로그인 테스트 실패', {
+          description: '아이디와 비밀번호를 확인해주세요.',
+        });
+      } else {
+        toast.success('설정이 저장되었습니다');
+      }
     } catch (error) {
       toast.error('설정 저장 실패', {
         description: '설정을 저장하는 중 오류가 발생했습니다.',
       });
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -79,32 +96,47 @@ export function SettingsPage() {
         return;
       }
 
+      setIsLoading(true);
+      setLoginError(null);
+
       const newStatus = !isMonitoring;
       const result = await window.electron.invoke('toggle-monitoring', newStatus);
-      console.log(result);
-      setIsMonitoring(newStatus);
 
-      if (newStatus) {
-        toast.success('모니터링 시작', {
-          description: `${form.getValues().checkInterval}분 간격으로 업무 요청을 확인합니다.`,
-        });
+      if (result.success) {
+        setIsMonitoring(newStatus);
+
+        if (newStatus) {
+          toast.success('모니터링 시작', {
+            description: `${form.getValues().checkInterval}분 간격으로 업무 요청을 확인합니다.`,
+          });
+        } else {
+          toast.info('모니터링 중지');
+        }
       } else {
-        toast.info('모니터링 중지');
+        // 실패 시 에러 메시지 표시
+        setLoginError(result.message || '모니터링 시작 실패');
+        toast.error('모니터링 시작 실패', {
+          description: result.message || '로그인 정보를 확인해주세요.',
+        });
       }
     } catch (error) {
       toast.error('모니터링 상태 변경 실패');
+      setLoginError('모니터링 상태 변경 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
     }
   }
 
-  // Check monitoring status on component mount
+  // 이벤트 리스너 등록 및 모니터링 상태 확인
   useEffect(() => {
+    if (!window.electron) {
+      console.error('Electron API not available');
+      return;
+    }
+
+    // 모니터링 상태 확인
     const checkStatus = async () => {
       try {
-        if (!window.electron) {
-          console.error('Electron API not available');
-          return;
-        }
-
         const status = await window.electron.invoke('get-monitoring-status');
         setIsMonitoring(status);
       } catch (error) {
@@ -113,6 +145,24 @@ export function SettingsPage() {
     };
 
     checkStatus();
+
+    // 로그인 에러 이벤트 리스너 등록
+    const loginErrorRemover = window.electron.on('login-error', (message: string) => {
+      setLoginError(message);
+      setIsMonitoring(false);
+      toast.error('로그인 오류', { description: message });
+    });
+
+    // 스크래핑 에러 이벤트 리스너 등록
+    const scrapingErrorRemover = window.electron.on('scraping-error', (message: string) => {
+      toast.error('데이터 수집 오류', { description: message });
+    });
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      loginErrorRemover();
+      scrapingErrorRemover();
+    };
   }, []);
 
   return (
@@ -123,6 +173,14 @@ export function SettingsPage() {
           <CardDescription>업무 사이트(https://114.unipost.co.kr) 접속 정보와 알림 설정을 구성하세요.</CardDescription>
         </CardHeader>
         <CardContent>
+          {loginError && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>로그인 오류</AlertTitle>
+              <AlertDescription>{loginError}</AlertDescription>
+            </Alert>
+          )}
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
@@ -169,9 +227,27 @@ export function SettingsPage() {
               />
               <div className="flex justify-between pt-4">
                 <div className="space-x-2">
-                  <Button type="submit">설정 저장</Button>
-                  <Button type="button" variant={isMonitoring ? 'destructive' : 'default'} onClick={toggleMonitoring}>
-                    {isMonitoring ? '모니터링 중지' : '모니터링 시작'}
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        처리 중...
+                      </>
+                    ) : (
+                      '설정 저장'
+                    )}
+                  </Button>
+                  <Button type="button" variant={isMonitoring ? 'destructive' : 'default'} onClick={toggleMonitoring} disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        처리 중...
+                      </>
+                    ) : isMonitoring ? (
+                      '모니터링 중지'
+                    ) : (
+                      '모니터링 시작'
+                    )}
                   </Button>
                 </div>
               </div>

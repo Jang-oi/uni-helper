@@ -44,24 +44,6 @@ export function AlertsPage() {
 
   useEffect(() => {
     loadAlerts();
-
-    // Listen for new alerts from the main process
-    const newAlertListener = (alert: AlertItem) => {
-      setAlerts((prev) => [alert, ...prev]);
-      setLastChecked(new Date().toLocaleString());
-    };
-
-    // 이벤트 리스너 등록 및 정리 함수 저장
-    let removeListener: (() => void) | undefined;
-
-    if (window.electron) {
-      removeListener = window.electron.receive('new-alert', newAlertListener);
-    }
-
-    // 컴포넌트 언마운트 시 이벤트 리스너 정리
-    return () => {
-      if (removeListener) removeListener();
-    };
   }, []);
 
   const clearAlerts = async () => {
