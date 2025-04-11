@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,16 +8,14 @@ import { z } from 'zod';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 
 const formSchema = z.object({
   username: z.string().min(1, { message: '아이디를 입력해주세요' }),
   password: z.string().min(1, { message: '비밀번호를 입력해주세요' }),
   checkInterval: z.coerce.number().min(1, { message: '최소 1분 이상 설정해주세요' }).max(60, { message: '최대 60분까지 설정 가능합니다' }),
-  businessHoursOnly: z.boolean().default(true),
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -37,7 +33,6 @@ export function SettingsPage() {
       username: '',
       password: '',
       checkInterval: 5,
-      businessHoursOnly: true,
     },
   });
 
@@ -79,12 +74,11 @@ export function SettingsPage() {
         const settings = await window.electron.invoke('get-settings');
         if (settings) {
           // 설정 적용
-          const { username, password, checkInterval, businessHoursOnly = true } = settings;
+          const { username, password, checkInterval } = settings;
           form.reset({
             username,
             password,
             checkInterval,
-            businessHoursOnly,
           });
         }
       } catch (error) {
@@ -111,6 +105,7 @@ export function SettingsPage() {
       const loginTest = await window.electron.invoke('test-login');
 
       if (!loginTest.success) {
+        console.log(loginTest);
         setLoginError('로그인 테스트 실패: 아이디와 비밀번호를 확인해주세요.');
         toast.error('로그인 테스트 실패', {
           description: '아이디와 비밀번호를 확인해주세요.',
@@ -144,14 +139,6 @@ export function SettingsPage() {
 
       setIsLoading(true);
       setLoginError(null);
-
-      // 업무 시간 외 모니터링 시작 시 경고
-      const businessHoursOnly = form.getValues().businessHoursOnly;
-      if (!isMonitoring && businessHoursOnly && !isBusinessHours) {
-        toast.warning('업무 시간 외 모니터링', {
-          description: '현재 업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 자동으로 시작됩니다.',
-        });
-      }
 
       const newStatus = !isMonitoring;
       const result = await window.electron.invoke('toggle-monitoring', newStatus);
@@ -290,31 +277,20 @@ export function SettingsPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="businessHoursOnly"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">업무 시간 모니터링</FormLabel>
-                      <FormDescription>
-                        업무 시간(07:00~20:00)에만 모니터링합니다. 주말에는 모니터링하지 않습니다.
-                        {currentTime && (
-                          <div className="flex items-center mt-1 text-sm">
-                            <Clock className="h-3 w-3 mr-1" />
-                            <span>
-                              현재 시간: {currentTime} ({isBusinessHours ? '업무 시간' : '업무 시간 외'})
-                            </span>
-                          </div>
-                        )}
-                      </FormDescription>
+              <Alert className="mt-4">
+                <Clock className="h-4 w-4" />
+                <AlertTitle>업무 시간 모니터링</AlertTitle>
+                <AlertDescription>
+                  모니터링은 평일 07:00~20:00 사이에만 작동합니다. 주말에는 모니터링하지 않습니다.
+                  {currentTime && (
+                    <div className="flex items-center mt-1 text-sm">
+                      <span>
+                        현재 시간: {currentTime} ({isBusinessHours ? '업무 시간' : '업무 시간 외'})
+                      </span>
                     </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                  )}
+                </AlertDescription>
+              </Alert>
               <div className="flex justify-between pt-4">
                 <div className="space-x-2">
                   <Button type="submit" disabled={isLoading}>
@@ -344,19 +320,6 @@ export function SettingsPage() {
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="bg-muted/50 text-sm text-muted-foreground">
-          <div className="space-y-1">
-            <p>
-              <strong>참고사항:</strong>
-            </p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>모니터링 설정은 사용자 PC에 저장되며, 앱을 종료해도 유지됩니다.</li>
-              <li>설정을 변경하면 현재 실행 중인 모니터링에도 즉시 적용됩니다.</li>
-              <li>업무 시간 모니터링 옵션을 켜면 평일 07:00~20:00 사이에만 모니터링합니다.</li>
-              <li>윈도우 알림을 클릭하면 해당 알림은 자동으로 읽음 처리됩니다.</li>
-            </ul>
-          </div>
-        </CardFooter>
       </Card>
     </div>
   );

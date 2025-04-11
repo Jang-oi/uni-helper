@@ -29,8 +29,10 @@ export function setMainWindow(window) {
 }
 
 // 외부 링크 열기
-const openUniPost = async (srIdx) => {
-  await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
+const openUniPost = (srIdx) => {
+  setTimeout(() => {
+    shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
+  }, 300);
 };
 
 // 현재 시간이 업무 시간인지 확인 (평일 07:00 ~ 20:00)
@@ -47,11 +49,6 @@ function isBusinessHours() {
 
 // 업무 시간 체크 및 모니터링 상태 관리
 async function checkBusinessHours() {
-  const settings = store.get('settings') || {};
-  const businessHoursOnly = settings.businessHoursOnly !== false; // 기본값은 true
-
-  if (!businessHoursOnly) return true; // 업무 시간 제한이 꺼져 있으면 항상 true
-
   const withinBusinessHours = isBusinessHours();
 
   // 모니터링 중이고 업무 시간이 아닌 경우 모니터링 일시 중지
@@ -236,10 +233,7 @@ async function checkLoginSession(window) {
 // 데이터 스크래핑 함수
 async function scrapeDataFromSite() {
   // 업무 시간 체크
-  const settings = store.get('settings') || {};
-  const businessHoursOnly = settings.businessHoursOnly !== false;
-
-  if (businessHoursOnly && !isBusinessHours()) {
+  if (!isBusinessHours()) {
     console.log('업무 시간이 아니므로 스크래핑 건너뜀');
     return { success: false, message: '업무 시간이 아닙니다', data: [] };
   }
@@ -278,7 +272,7 @@ async function scrapeDataFromSite() {
 
     // iframe 내 데이터 스크래핑
     const result = await dataWindow.webContents.executeJavaScript(`
-      (function() {
+      (async function() {
             try {
               const li = document.querySelector('li[title="요청내역관리"], li[name="요청내역관리"]');
               if (!li) return { success: false, message: "요청내역관리 탭을 찾을 수 없습니다" };
@@ -287,6 +281,9 @@ async function scrapeDataFromSite() {
               const iframe = document.getElementById(tabId);
               
               if (!iframe || !iframe.contentWindow) return { success: false, message: "iframe을 찾을 수 없습니다" };
+              iframe.contentDocument.querySelector('#nowMonth').click();
+              await new Promise((resolve) => setTimeout(resolve, 5000));
+              
               const grid = iframe.contentWindow.grid;
               const gridData = grid.getAllRowValue();
 
@@ -316,6 +313,14 @@ async function scrapeDataFromSite() {
 // 모니터링 함수
 async function checkForNewRequests() {
   try {
+    // 업무 시간 체크
+    const withinBusinessHours = await checkBusinessHours();
+
+    if (!withinBusinessHours) {
+      console.log('업무 시간이 아니므로 모니터링 건너뜀');
+      return { success: false, message: '업무 시간이 아닙니다' };
+    }
+
     // 현재 시간 설정
     const now = new Date();
     const nowString = now.toLocaleString();
@@ -333,47 +338,32 @@ async function checkForNewRequests() {
     }
 
     const data = result.data;
-
     if (data.length > 0) {
-      // 이전 데이터와 비교하여 새로운 항목 확인
       const existingAlerts = store.get('alerts') || [];
-      const existingIds = new Set(existingAlerts.map((alert) => alert.SR_IDX));
+      const existingMap = new Map(existingAlerts.map((alert) => [alert.SR_IDX, alert]));
 
-      // 각 데이터 항목을 알림으로 변환
-      const alerts = data.map((item) => ({
-        SR_IDX: item['SR_IDX'],
-        REQ_TITLE: item['REQ_TITLE'],
-        CN_NAME: item['CN_NAME'],
-        STATUS: item['STATUS'],
-        WRITER: item['WRITER'],
-        REQ_DATE: item['REQ_DATE'],
-        REQ_DATE_ALL: item['REQ_DATE_ALL'],
-        isNew: true,
-      }));
+      // 업데이트된 알림 리스트 만들기
+      const updatedAlerts = data.map((item) => {
+        const existing = existingMap.get(item['SR_IDX']);
 
-      // 앱 최초 실행 시 오늘 날짜 이후 데이터만 필터링
-      const isFirstRun = !store.has('alerts');
-      let filteredAlerts = alerts;
+        return {
+          SR_IDX: item['SR_IDX'],
+          REQ_TITLE: item['REQ_TITLE'],
+          CM_NAME: item['CM_NAME'],
+          STATUS: item['STATUS'],
+          WRITER: item['WRITER'],
+          REQ_DATE: item['REQ_DATE'],
+          REQ_DATE_ALL: item['REQ_DATE_ALL'],
+          isNew: !existing, // 새 항목이면 true
+          isRead: existing?.isRead ?? false, // 기존에 읽은 거면 유지
+        };
+      });
 
-      if (isFirstRun) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // 오늘 자정으로 설정
-
-        filteredAlerts = alerts.filter((alert) => {
-          // REQ_DATE_ALL 형식: "2023-04-11 14:30:00"
-          const alertDate = new Date(alert.REQ_DATE_ALL);
-          return alertDate >= today;
-        });
-
-        console.log(`최초 실행: 오늘(${today.toLocaleDateString()}) 이후 알림만 표시 (${filteredAlerts.length}/${alerts.length})`);
-      }
-
-      // 새로운 알림만 필터링
-      const newAlerts = filteredAlerts.filter((alert) => !existingIds.has(alert.SR_IDX));
+      // 새 알림만 필터링
+      const newAlerts = updatedAlerts.filter((alert) => !existingMap.has(alert.SR_IDX));
 
       if (newAlerts.length > 0) {
-        // 새 알림을 저장소에 추가
-        store.set('alerts', [...newAlerts, ...existingAlerts]);
+        store.set('alerts', updatedAlerts); // 기존 + 업데이트 모두 반영
 
         newAlerts.forEach((alert) => {
           const notification = new Notification({
@@ -381,26 +371,22 @@ async function checkForNewRequests() {
             body: `💡 상태: ${alert.STATUS}\n🕒 요청 시간: ${alert.REQ_DATE_ALL}`,
           });
 
-          // 클릭하면 브라우저 열기 및 읽음 처리
-          notification.on('click', () => {
-            openUniPost(alert.SR_IDX);
+          notification.on('click', async () => {
+            try {
+              const alerts = store.get('alerts') || [];
+              const updated = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false, isRead: true } : a));
+              store.set('alerts', updated);
 
-            // 알림 읽음 처리
-            const alerts = store.get('alerts') || [];
-            const updatedAlerts = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false, isRead: true } : a));
-            store.set('alerts', updatedAlerts);
+              if (mainWindow) mainWindow.webContents.send('alert-marked-as-read', alert.SR_IDX);
+              console.log(`알림 읽음 처리: ${alert.SR_IDX}`);
 
-            // 메인 윈도우에 알림 상태 변경 알림
-            if (mainWindow) {
-              mainWindow.webContents.send('alert-marked-as-read', alert.SR_IDX);
+              openUniPost(alert.SR_IDX);
+            } catch (error) {
+              console.error('알림 읽음 처리 중 오류:', error);
             }
           });
 
-          // 알림 표시
           notification.show();
-
-          // 렌더러에 알림 전송
-          if (mainWindow) mainWindow.webContents.send('new-alert', alert);
         });
       }
 
@@ -440,9 +426,8 @@ async function updateMonitoringSettings() {
 
   // 업무 시간 체크
   const withinBusinessHours = await checkBusinessHours();
-  const businessHoursOnly = settings.businessHoursOnly !== false;
 
-  if (businessHoursOnly && !withinBusinessHours) {
+  if (!withinBusinessHours) {
     // 업무 시간이 아니면 모니터링 일시 중지
     await pauseMonitoring();
     return { success: true, message: '업무 시간이 아니므로 모니터링이 일시 중지되었습니다.' };
@@ -472,9 +457,8 @@ async function startMonitoring() {
 
   // 업무 시간 체크
   const withinBusinessHours = await checkBusinessHours();
-  const businessHoursOnly = settings.businessHoursOnly !== false;
 
-  if (businessHoursOnly && !withinBusinessHours) {
+  if (!withinBusinessHours) {
     // 업무 시간이 아니면 일시 중지 상태로 저장하고 다음 업무 시간에 자동 시작
     store.set('monitoringPaused', true);
 
@@ -505,9 +489,6 @@ async function startMonitoring() {
     if (!initialCheck.success && initialCheck.message !== '업무 시간이 아닙니다') {
       return { success: false, message: `초기 데이터 확인 실패: ${initialCheck.message || initialCheck.error}` };
     }
-
-    // 세션 만료 방지를 위한 주기적 체크
-    // sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
 
     // 데이터 모니터링 인터벌 설정
     monitoringInterval = setInterval(checkForNewRequests, interval);
@@ -650,7 +631,7 @@ export function registerIpcHandlers() {
   // 요청 상세 보기 핸들러
   ipcMain.handle('open-request', async (event, srIdx) => {
     try {
-      await openUniPost(srIdx);
+      openUniPost(srIdx);
       return { success: true };
     } catch (error) {
       console.error('요청 상세 보기 중 오류:', error);

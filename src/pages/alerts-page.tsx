@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface AlertItem {
   SR_IDX: string;
   REQ_TITLE: string;
-  CN_NAME: string;
+  CM_NAME: string;
   STATUS: string;
   WRITER: string;
   REQ_DATE: string;
@@ -70,22 +70,19 @@ export function AlertsPage() {
   useEffect(() => {
     loadAlerts();
 
+    if (!window.electron) {
+      console.error('Electron API not available');
+      return;
+    }
+
     // 알림 읽음 처리 이벤트 리스너 등록
     const removeAlertMarkedAsReadListener = window.electron.on('alert-marked-as-read', (srIdx: string) => {
+      console.log(`알림 읽음 처리 이벤트 수신: ${srIdx}`);
       setAlerts((prev) => prev.map((alert) => (alert.SR_IDX === srIdx ? { ...alert, isNew: false, isRead: true } : alert)));
     });
 
-    // 새 알림 이벤트 리스너 등록
-    const removeNewAlertListener = window.electron?.on('new-alert', (alert: AlertItem) => {
-      setAlerts((prev) => [alert, ...prev]);
-      toast.info(`새 요청: ${alert.REQ_TITLE}`, {
-        description: `${alert.CN_NAME} - ${alert.STATUS}`,
-      });
-    });
-
     return () => {
-      if (removeNewAlertListener) removeNewAlertListener();
-      if (removeAlertMarkedAsReadListener) removeAlertMarkedAsReadListener();
+      removeAlertMarkedAsReadListener();
     };
   }, []);
 
@@ -203,7 +200,7 @@ export function AlertsPage() {
                       <h3 className="font-medium flex items-center gap-2">
                         {alert.isNew && !alert.isRead && <span className="w-2 h-2 bg-primary rounded-full" aria-hidden="true" />}
                         <span>
-                          {alert.CN_NAME} - {alert.REQ_TITLE}
+                          {alert.CM_NAME} - {alert.REQ_TITLE}
                         </span>
                       </h3>
                       <Badge variant={getStatusVariant(alert.STATUS)}>{alert.STATUS}</Badge>

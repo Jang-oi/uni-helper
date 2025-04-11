@@ -21,12 +21,12 @@ const validChannels = [
 
     // 데이터 관련
     "scraping-error",
-    "new-alert",
 
     // 알림 상태 관련
     "mark-alert-as-read",
     "mark-all-alerts-as-read",
     "open-request",
+    "alert-marked-as-read",
 
     // 업무 시간 관련
     "monitoring-status-changed",
