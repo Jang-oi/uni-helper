@@ -11,6 +11,7 @@ const validChannels = [
     "get-monitoring-status",
     "update-monitoring-settings",
 
+
     // 알림 관련
     "get-alerts",
     "clear-alerts",
@@ -27,6 +28,7 @@ const validChannels = [
     "mark-all-alerts-as-read",
     "open-request",
     "alert-marked-as-read",
+    "get-alerts-paginated",
 
     // 업무 시간 관련
     "monitoring-status-changed",

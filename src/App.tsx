@@ -5,13 +5,19 @@ import { HashRouter, Route, Routes } from 'react-router-dom';
 
 import { AppSidebar } from '@/components/app-sidebar';
 import { SiteHeader } from '@/components/layout/site-header.tsx';
+import { LoadingOverlay } from '@/components/loading-overlay.tsx';
 import { ThemeProvider } from '@/components/theme-provider';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
 
+import { useAppStore } from '@/store/app-store.ts';
+
 export function App() {
+  const { isLoading, loadingMessage } = useAppStore();
+
   return (
     <ThemeProvider defaultTheme="light" storageKey="app-theme">
+      <LoadingOverlay isVisible={isLoading} message={loadingMessage} />
       <HashRouter>
         <SidebarProvider>
           <AppSidebar />

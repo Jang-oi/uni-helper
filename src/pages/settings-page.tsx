@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { Clock, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { LoadingOverlay } from '@/components/loading-overlay';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+
+import { useAppStore } from '@/store/app-store';
 
 const formSchema = z.object({
   username: z.string().min(1, { message: '아이디를 입력해주세요' }),
@@ -23,9 +26,9 @@ type SettingsFormValues = z.infer<typeof formSchema>;
 export function SettingsPage() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isBusinessHours, setIsBusinessHours] = useState(true);
+  const { setMonitoring, setSavingSettings, setLoading } = useAppStore();
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(formSchema),
@@ -97,16 +100,17 @@ export function SettingsPage() {
       }
 
       setIsLoading(true);
-      setLoginError(null);
+      setLoading(true, '설정을 저장하고 있습니다...');
+      setSavingSettings(true); // 설정 저장 상태 업데이트
 
       await window.electron.invoke('save-settings', values);
 
       // 설정 저장 후 로그인 테스트
+      setLoading(true, '로그인 테스트 중...');
       const loginTest = await window.electron.invoke('test-login');
 
       if (!loginTest.success) {
         console.log(loginTest);
-        setLoginError('로그인 테스트 실패: 아이디와 비밀번호를 확인해주세요.');
         toast.error('로그인 테스트 실패', {
           description: '아이디와 비밀번호를 확인해주세요.',
         });
@@ -115,6 +119,7 @@ export function SettingsPage() {
 
         // 모니터링 중인 경우 설정 변경 적용
         if (isMonitoring) {
+          setLoading(true, '모니터링 설정을 업데이트하고 있습니다...');
           await window.electron.invoke('update-monitoring-settings');
           toast.info('모니터링 설정이 업데이트되었습니다', {
             description: `${values.checkInterval}분 간격으로 업데이트됩니다.`,
@@ -127,6 +132,8 @@ export function SettingsPage() {
       });
     } finally {
       setIsLoading(false);
+      setLoading(false);
+      setSavingSettings(false); // 설정 저장 상태 업데이트 완료
     }
   }
 
@@ -138,9 +145,16 @@ export function SettingsPage() {
       }
 
       setIsLoading(true);
-      setLoginError(null);
-
       const newStatus = !isMonitoring;
+
+      if (newStatus) {
+        setLoading(true, '모니터링을 시작하고 있습니다...');
+      } else {
+        setLoading(true, '모니터링을 중지하고 있습니다...');
+      }
+
+      setMonitoring(newStatus); // 모니터링 상태 업데이트
+
       const result = await window.electron.invoke('toggle-monitoring', newStatus);
 
       if (result.success) {
@@ -154,17 +168,20 @@ export function SettingsPage() {
           toast.info('모니터링 중지');
         }
       } else {
-        // 실패 시 에러 메시지 표시
-        setLoginError(result.message || '모니터링 시작 실패');
         toast.error('모니터링 시작 실패', {
           description: result.message || '로그인 정보를 확인해주세요.',
         });
+        setMonitoring(false); // 모니터링 상태 업데이트 (실패 시 false로 설정)
       }
     } catch (error) {
       toast.error('모니터링 상태 변경 실패');
-      setLoginError('모니터링 상태 변경 중 오류가 발생했습니다.');
+      setMonitoring(false); // 모니터링 상태 업데이트 (실패 시 false로 설정)
     } finally {
       setIsLoading(false);
+      setLoading(false);
+      if (!isMonitoring) {
+        setMonitoring(false); // 모니터링 중지 시 상태 업데이트
+      }
     }
   }
 
@@ -180,6 +197,7 @@ export function SettingsPage() {
       try {
         const status = await window.electron.invoke('get-monitoring-status');
         setIsMonitoring(status);
+        setMonitoring(status); // 앱 스토어 상태 업데이트
       } catch (error) {
         console.error('Failed to get monitoring status:', error);
       }
@@ -189,8 +207,8 @@ export function SettingsPage() {
 
     // 로그인 에러 이벤트 리스너 등록
     const loginErrorRemover = window.electron.on('login-error', (message: string) => {
-      setLoginError(message);
       setIsMonitoring(false);
+      setMonitoring(false); // 앱 스토어 상태 업데이트
       toast.error('로그인 오류', { description: message });
     });
 
@@ -202,6 +220,7 @@ export function SettingsPage() {
     // 모니터링 상태 변경 이벤트 리스너
     const monitoringStatusRemover = window.electron.on('monitoring-status-changed', (status: boolean) => {
       setIsMonitoring(status);
+      setMonitoring(status); // 앱 스토어 상태 업데이트
       if (status) {
         toast.success('모니터링이 시작되었습니다');
       } else {
@@ -211,116 +230,116 @@ export function SettingsPage() {
 
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
-      loginErrorRemover();
-      scrapingErrorRemover();
-      monitoringStatusRemover();
+      if (typeof loginErrorRemover === 'function') loginErrorRemover();
+      if (typeof scrapingErrorRemover === 'function') scrapingErrorRemover();
+      if (typeof monitoringStatusRemover === 'function') monitoringStatusRemover();
     };
-  }, []);
+  }, [setMonitoring]);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>업무 사이트 설정</CardTitle>
-          <CardDescription>업무 사이트(https://114.unipost.co.kr) 접속 정보와 알림 설정을 구성하세요.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loginError && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>로그인 오류</AlertTitle>
-              <AlertDescription>{loginError}</AlertDescription>
-            </Alert>
-          )}
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>아이디</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>비밀번호</FormLabel>
-                      <FormControl>
-                        <Input type="password" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="checkInterval"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>확인 주기 (분)</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={1} max={60} {...field} />
-                    </FormControl>
-                    <FormDescription>업무 사이트를 확인할 주기를 분 단위로 설정하세요. (최소 1분)</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Alert className="mt-4">
-                <Clock className="h-4 w-4" />
-                <AlertTitle>업무 시간 모니터링</AlertTitle>
-                <AlertDescription>
-                  모니터링은 평일 07:00~20:00 사이에만 작동합니다. 주말에는 모니터링하지 않습니다.
-                  {currentTime && (
-                    <div className="flex items-center mt-1 text-sm">
-                      <span>
-                        현재 시간: {currentTime} ({isBusinessHours ? '업무 시간' : '업무 시간 외'})
-                      </span>
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-              <div className="flex justify-between pt-4">
-                <div className="space-x-2">
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        처리 중...
-                      </>
-                    ) : (
-                      '설정 저장'
+    <>
+      <LoadingOverlay isVisible={isLoading} />
+      <div className="max-w-3xl mx-auto space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>업무 사이트 설정</CardTitle>
+            <CardDescription>업무 사이트(https://114.unipost.co.kr) 접속 정보와 알림 설정을 구성하세요.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>아이디</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </Button>
-                  <Button type="button" variant={isMonitoring ? 'destructive' : 'default'} onClick={toggleMonitoring} disabled={isLoading}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        처리 중...
-                      </>
-                    ) : isMonitoring ? (
-                      '모니터링 중지'
-                    ) : (
-                      '모니터링 시작'
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>비밀번호</FormLabel>
+                        <FormControl>
+                          <Input type="password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </Button>
+                  />
                 </div>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    </div>
+                <FormField
+                  control={form.control}
+                  name="checkInterval"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>확인 주기 (분)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} max={60} {...field} />
+                      </FormControl>
+                      <FormDescription>업무 사이트를 확인할 주기를 분 단위로 설정하세요. (최소 1분)</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Alert className="mt-4">
+                  <Clock className="h-4 w-4" />
+                  <AlertTitle>업무 시간 모니터링</AlertTitle>
+                  <AlertDescription>
+                    모니터링은 평일 07:00~20:00 사이에만 작동합니다. 주말에는 모니터링하지 않습니다.
+                    {currentTime && (
+                      <div className="flex items-center mt-1 text-sm">
+                        <span>
+                          현재 시간: {currentTime} ({isBusinessHours ? '업무 시간' : '업무 시간 외'})
+                        </span>
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+                <div className="flex justify-between pt-4">
+                  <div className="space-x-2">
+                    <Button type="submit" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          처리 중...
+                        </>
+                      ) : (
+                        '설정 저장'
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={isMonitoring ? 'destructive' : 'default'}
+                      onClick={toggleMonitoring}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          처리 중...
+                        </>
+                      ) : isMonitoring ? (
+                        '모니터링 중지'
+                      ) : (
+                        '모니터링 시작'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }

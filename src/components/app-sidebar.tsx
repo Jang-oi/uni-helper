@@ -34,7 +34,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={currentPath === '/alerts'}>
               <Link to="/alerts">
                 <Bell className="h-5 w-5" />
-                <span>알람</span>
+                <span>알림</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

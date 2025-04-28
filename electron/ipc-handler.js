@@ -365,6 +365,9 @@ async function checkForNewRequests() {
       if (newAlerts.length > 0) {
         store.set('alerts', updatedAlerts); // 기존 + 업데이트 모두 반영
 
+        // 새 알림이 있을 때 메인 윈도우에 알림 이벤트 전송 (추가)
+        if (mainWindow) mainWindow.webContents.send('new-alerts-available', newAlerts.length);
+
         newAlerts.forEach((alert) => {
           const notification = new Notification({
             title: `📬 ${alert.REQ_TITLE}`,
@@ -536,6 +539,42 @@ function stopMonitoring() {
   return { success: true, message: '모니터링이 중지되었습니다.' };
 }
 
+async function getAlertsWithPagination(event, { page = 1, pageSize = 10 }) {
+  try {
+    // 저장된 모든 알림 가져오기
+    const allAlerts = store.get('alerts') || [];
+
+    // 전체 알림 수
+    const totalAlerts = allAlerts.length;
+
+    // 전체 페이지 수 계산
+    const totalPages = Math.ceil(totalAlerts / pageSize);
+
+    // 현재 페이지에 해당하는 알림만 추출
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalAlerts);
+    const paginatedAlerts = allAlerts.slice(startIndex, endIndex);
+
+    // 마지막 확인 시간
+    const lastChecked = store.get('lastChecked') || null;
+
+    return {
+      success: true,
+      alerts: paginatedAlerts,
+      lastChecked,
+      pagination: {
+        page,
+        pageSize,
+        totalAlerts,
+        totalPages,
+      },
+    };
+  } catch (error) {
+    console.error('알림 목록 조회 중 오류:', error);
+    return { success: false, error: error.toString() };
+  }
+}
+
 // IPC 핸들러 등록
 export function registerIpcHandlers() {
   // 설정 관련 핸들러
@@ -638,4 +677,6 @@ export function registerIpcHandlers() {
       return { success: false, message: error.toString() };
     }
   });
+
+  ipcMain.handle('get-alerts-paginated', getAlertsWithPagination);
 }
