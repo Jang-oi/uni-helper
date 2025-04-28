@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 
 import { Download, RefreshCw } from 'lucide-react';

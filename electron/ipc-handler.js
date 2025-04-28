@@ -79,12 +79,6 @@ async function pauseMonitoring() {
 
   isMonitoring = false;
   store.set('monitoringPaused', true); // 일시 중지 상태 저장
-
-  // 메인 윈도우에 상태 변경 알림
-  if (mainWindow) {
-    mainWindow.webContents.send('monitoring-status-changed', false);
-    mainWindow.webContents.send('business-hours-notification', '업무 시간(07:00~20:00)이 아니므로 모니터링이 일시 중지되었습니다.');
-  }
 }
 
 // 모니터링 재개 (업무 시간)
@@ -102,34 +96,21 @@ async function resumeMonitoring() {
   monitoringInterval = setInterval(checkForNewRequests, interval);
   isMonitoring = true;
   store.delete('monitoringPaused'); // 일시 중지 상태 제거
-
-  // 메인 윈도우에 상태 변경 알림
-  if (mainWindow) {
-    mainWindow.webContents.send('monitoring-status-changed', true);
-    mainWindow.webContents.send('business-hours-notification', '업무 시간이 시작되어 모니터링이 재개되었습니다.');
-  }
 }
 
 // 로그인 확인 함수
 async function ensureLoggedIn() {
   // 이미 로그인 상태면 바로 반환
-  if (isLoggedIn) return true;
+  if (isLoggedIn) return { success: true, message: '로그인 성공 ' };
 
   // 설정 확인
   const settings = store.get('settings');
-  if (!settings || !settings.username || !settings.password) {
-    return false;
-  }
+  if (!settings || !settings.username || !settings.password) return false;
+  // 로그인 시도
+  const { success, message } = await performLogin(settings.username, settings.password);
+  isLoggedIn = success;
 
-  try {
-    // 로그인 시도
-    const result = await performLogin(settings.username, settings.password);
-    isLoggedIn = result.success;
-    return isLoggedIn;
-  } catch (error) {
-    console.error('로그인 실패:', error);
-    return false;
-  }
+  return { success, message };
 }
 
 // 로그인 수행 함수
@@ -238,11 +219,10 @@ async function scrapeDataFromSite() {
     return { success: false, message: '업무 시간이 아닙니다', data: [] };
   }
 
-  // 로그인 상태 확인 및 필요시 로그인
-  const loggedIn = await ensureLoggedIn();
-  if (!loggedIn) {
+  const { success, message } = await ensureLoggedIn();
+  if (!success) {
     console.error('데이터 스크래핑을 위한 로그인 실패');
-    return { success: false, message: '로그인 실패', data: [] };
+    return { success: false, message: message, data: [] };
   }
 
   dataWindow = new BrowserWindow({
@@ -331,11 +311,7 @@ async function checkForNewRequests() {
     // 마지막 확인 시간 업데이트
     store.set('lastChecked', nowString);
 
-    if (!result.success) {
-      // 스크래핑 실패 시 메인 윈도우에 알림
-      if (mainWindow) mainWindow.webContents.send('scraping-error', result.message);
-      return { success: false, message: result.message };
-    }
+    if (!result.success) return { success: false, message: result.message };
 
     const data = result.data;
     if (data.length > 0) {
@@ -355,7 +331,6 @@ async function checkForNewRequests() {
           REQ_DATE: item['REQ_DATE'],
           REQ_DATE_ALL: item['REQ_DATE_ALL'],
           isNew: !existing, // 새 항목이면 true
-          isRead: existing?.isRead ?? false, // 기존에 읽은 거면 유지
         };
       });
 
@@ -375,18 +350,11 @@ async function checkForNewRequests() {
           });
 
           notification.on('click', async () => {
-            try {
-              const alerts = store.get('alerts') || [];
-              const updated = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false, isRead: true } : a));
-              store.set('alerts', updated);
+            const alerts = store.get('alerts') || [];
+            const updated = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false } : a));
+            store.set('alerts', updated);
 
-              if (mainWindow) mainWindow.webContents.send('alert-marked-as-read', alert.SR_IDX);
-              console.log(`알림 읽음 처리: ${alert.SR_IDX}`);
-
-              openUniPost(alert.SR_IDX);
-            } catch (error) {
-              console.error('알림 읽음 처리 중 오류:', error);
-            }
+            openUniPost(alert.SR_IDX);
           });
 
           notification.show();
@@ -401,48 +369,6 @@ async function checkForNewRequests() {
     console.error('모니터링 중 오류:', error);
     return { success: false, error: error.toString() };
   }
-}
-
-// 모니터링 설정 업데이트
-async function updateMonitoringSettings() {
-  if (!isMonitoring) return { success: true, message: '모니터링이 실행 중이 아닙니다.' };
-
-  // 기존 인터벌 정리
-  if (monitoringInterval) {
-    clearInterval(monitoringInterval);
-    monitoringInterval = null;
-  }
-
-  if (sessionCheckInterval) {
-    clearInterval(sessionCheckInterval);
-    sessionCheckInterval = null;
-  }
-
-  // 설정 가져오기
-  const settings = store.get('settings');
-  if (!settings || !settings.checkInterval) {
-    return { success: false, message: '설정 정보가 없습니다.' };
-  }
-
-  // 분을 밀리초로 변환
-  const interval = settings.checkInterval * 60 * 1000;
-
-  // 업무 시간 체크
-  const withinBusinessHours = await checkBusinessHours();
-
-  if (!withinBusinessHours) {
-    // 업무 시간이 아니면 모니터링 일시 중지
-    await pauseMonitoring();
-    return { success: true, message: '업무 시간이 아니므로 모니터링이 일시 중지되었습니다.' };
-  }
-
-  // 세션 체크 인터벌 설정
-  sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
-
-  // 모니터링 인터벌 설정
-  monitoringInterval = setInterval(checkForNewRequests, interval);
-
-  return { success: true, message: '모니터링 설정이 업데이트되었습니다.' };
 }
 
 // 모니터링 시작 함수
@@ -464,26 +390,19 @@ async function startMonitoring() {
   if (!withinBusinessHours) {
     // 업무 시간이 아니면 일시 중지 상태로 저장하고 다음 업무 시간에 자동 시작
     store.set('monitoringPaused', true);
-
     // 업무 시간 체크 인터벌 설정 (1분마다)
     businessHoursCheckInterval = setInterval(checkBusinessHours, 60000);
-
-    return {
-      success: true,
-      message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 자동으로 시작됩니다.',
-    };
+    return { success: false, message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 자동으로 시작됩니다.' };
   }
 
   // 분을 밀리초로 변환
   const interval = settings.checkInterval * 60 * 1000;
 
   // 초기 체크 (로그인 포함)
-  const loggedIn = await ensureLoggedIn();
-  if (!loggedIn) {
+  const { success, message } = await ensureLoggedIn();
+  if (!success) {
     console.error('모니터링 시작 실패: 로그인할 수 없습니다');
-    if (mainWindow) mainWindow.webContents.send('login-error', '모니터링을 시작할 수 없습니다. 로그인 정보를 확인해주세요.');
-
-    return { success: false, message: '로그인할 수 없습니다. 아이디와 비밀번호를 확인해주세요.' };
+    return { success, message };
   }
 
   try {
@@ -501,9 +420,7 @@ async function startMonitoring() {
       const withinBusinessHours = await checkBusinessHours();
 
       // 업무 시간 내에만 세션 체크 수행
-      if (withinBusinessHours) {
-        await ensureLoggedIn();
-      }
+      if (withinBusinessHours) await ensureLoggedIn();
     }, SESSION_CHECK_INTERVAL);
 
     isMonitoring = true;
@@ -542,7 +459,7 @@ function stopMonitoring() {
 async function getAlertsWithPagination(event, { page = 1, pageSize = 10 }) {
   try {
     // 저장된 모든 알림 가져오기
-    const allAlerts = store.get('alerts') || [];
+    let allAlerts = store.get('alerts') || [];
 
     // 전체 알림 수
     const totalAlerts = allAlerts.length;
@@ -598,72 +515,6 @@ export function registerIpcHandlers() {
       return startMonitoring();
     } else {
       return stopMonitoring();
-    }
-  });
-
-  ipcMain.handle('get-monitoring-status', async () => {
-    return isMonitoring;
-  });
-
-  // 모니터링 설정 업데이트 핸들러
-  ipcMain.handle('update-monitoring-settings', async () => {
-    return updateMonitoringSettings();
-  });
-
-  // 알림 관련 핸들러
-  ipcMain.handle('get-alerts', async () => {
-    return {
-      alerts: store.get('alerts') || [],
-      lastChecked: store.get('lastChecked'),
-    };
-  });
-
-  ipcMain.handle('clear-alerts', async () => {
-    try {
-      store.set('alerts', []);
-      return { success: true };
-    } catch (error) {
-      console.error('알림 초기화 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  // 로그인 테스트 핸들러
-  ipcMain.handle('test-login', async () => {
-    try {
-      const result = await ensureLoggedIn();
-      return { success: result, message: result ? '로그인 성공' : '로그인 실패' };
-    } catch (error) {
-      console.error('로그인 테스트 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  // 알림 읽음 표시 핸들러
-  ipcMain.handle('mark-alert-as-read', async (event, srIdx) => {
-    try {
-      const alerts = store.get('alerts') || [];
-      const updatedAlerts = alerts.map((alert) => (alert.SR_IDX === srIdx ? { ...alert, isNew: false, isRead: true } : alert));
-
-      store.set('alerts', updatedAlerts);
-      return { success: true };
-    } catch (error) {
-      console.error('알림 상태 변경 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  // 모든 알림 읽음 표시 핸들러
-  ipcMain.handle('mark-all-alerts-as-read', async () => {
-    try {
-      const alerts = store.get('alerts') || [];
-      const updatedAlerts = alerts.map((alert) => ({ ...alert, isNew: false, isRead: true }));
-
-      store.set('alerts', updatedAlerts);
-      return { success: true };
-    } catch (error) {
-      console.error('알림 상태 변경 중 오류:', error);
-      return { success: false, message: error.toString() };
     }
   });
 

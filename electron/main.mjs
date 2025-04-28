@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray } from 'electron';
+import { app, BrowserWindow, Menu, Tray } from 'electron';
 import path from 'path';
 import { registerIpcHandlers, setMainWindow } from './ipc-handler.js';
 import { fileURLToPath } from 'url';
