@@ -9,7 +9,8 @@
   "scripts": {
     "test": "concurrently \"vite\" \"cross-env NODE_ENV=development electron .\"",
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "build": "tsc -b && vite build && electron-builder",
+    "build": "rimraf dist && vite build && electron-builder",
+    "build:win": "vite build && electron-builder --win --x64",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:test": "electron electron/main.mjs"
@@ -60,6 +61,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
     "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
@@ -67,17 +69,34 @@
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.yourcompany.workmonitor",
-    "productName": "Work Monitor",
-    "directories": {
-      "output": "dist-electron"
-    },
+    "appId": "com.unipost.helper.app",
+    "productName": "uni-helper-app",
     "files": [
-      "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "build/**/*"
     ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "electron"
+    },
+    "extraResources": [
+      {
+        "from": "build",
+        "to": "build"
+      }
+    ],
+    "asar": false,
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "./electron/256_favicon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Uni-Helper-App",
+      "artifactName": "Uni-Helper-App ${version}.${ext}",
+      "uninstallDisplayName": "Uni-Helper-App"
     }
   }
 }

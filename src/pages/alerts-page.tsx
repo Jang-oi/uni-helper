@@ -23,7 +23,7 @@ interface AlertItem {
   WRITER: string;
   REQ_DATE: string;
   REQ_DATE_ALL: string;
-  COMPLETE_DATE_ALL: string;
+  PROCESS_DATE: string;
 }
 
 // 페이지네이션 정보 인터페이스
@@ -38,11 +38,11 @@ interface PaginationInfo {
 function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   const statusLower = status.toLowerCase();
 
-  if (statusLower.includes('접수')) {
+  if (statusLower.includes('처리')) {
     return 'default';
   } else if (statusLower.includes('요청')) {
     return 'secondary';
-  } else if (statusLower.includes('처리') || statusLower.includes('고객사')) {
+  } else if (statusLower.includes('고객사')) {
     return 'destructive';
   } else {
     return 'outline';

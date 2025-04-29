@@ -25,8 +25,10 @@ async function createWindow() {
     center         : true,
   });
 
+  const indexPath = path.join(__dirname, '../build/index.html') // 패키징된 앱에서의 경로
+
   if (process.env.NODE_ENV === "development") await mainWindow.loadURL("http://localhost:5173")
-  else await mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
+  else await mainWindow.loadFile(indexPath);
 
   electronLocalShortcut.register(mainWindow, 'F5', () => {
     mainWindow.reload();

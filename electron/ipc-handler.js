@@ -261,7 +261,8 @@ async function scrapeDataFromSite() {
               if (!iframe || !iframe.contentWindow) return { success: false, message: "iframe을 찾을 수 없습니다" };
               iframe.contentWindow.UNIUX.SVC('PROGRESSION_TYPE', 'R,E,O,A,C,N,M');
               iframe.contentWindow.UNIUX.SVC('START_DATE', new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]);
-              iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE', '4');
+              // const currentTeam = iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE').split(',')[0]
+              // iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE', currentTeam);
               iframe.contentDocument.querySelector('#doSearch').click();
               
               await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -324,27 +325,21 @@ async function checkForNewRequests() {
 
     // 기존 알림 불러오기
     const existingAlerts = store.get('alerts') || [];
-    const existingMap = new Map(existingAlerts.map((alert) => [alert.SR_IDX, alert]));
-
-    // 특정 상태('처리중', '고객사답변', '접수', '검토')인 항목만 필터링하여 업데이트된 알림 리스트 만들기
-    const allowedStatuses = ['처리중', '고객사답변', '접수', '검토'];
-
     // 항목 필터링하여 업데이트된 알림 리스트 만들기
-    const updatedAlerts = data
-      .filter((item) => allowedStatuses.includes(item['STATUS']))
-      .map((item) => ({
-        SR_IDX: item['SR_IDX'],
-        REQ_TITLE: item['REQ_TITLE'],
-        CM_NAME: item['CM_NAME'],
-        STATUS: item['STATUS'],
-        WRITER: item['WRITER'],
-        REQ_DATE: item['REQ_DATE'],
-        REQ_DATE_ALL: item['REQ_DATE_ALL'],
-        COMPLETE_DATE_ALL: item['COMPLETE_DATE_ALL'],
-      }));
+    const updatedAlerts = data.map((item) => ({
+      SR_IDX: item['SR_IDX'],
+      REQ_TITLE: item['REQ_TITLE'],
+      CM_NAME: item['CM_NAME'],
+      STATUS: item['STATUS'],
+      WRITER: item['WRITER'],
+      REQ_DATE: item['REQ_DATE'],
+      REQ_DATE_ALL: item['REQ_DATE_ALL'],
+      PROCESS_DATE: item['PROCESS_DATE'],
+    }));
 
     // 새 알림만 필터링
-    const newAlerts = updatedAlerts.filter((alert) => !existingMap.has(alert.SR_IDX));
+    // 새 알림 찾기 - 기존 알림에 없는 SR_IDX를 가진 항목들
+    const newAlerts = updatedAlerts.filter((newAlert) => !existingAlerts.some((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX));
     // 알림 저장 (완료 상태 항목은 제외됨)
     store.set('alerts', updatedAlerts);
     // 메인 윈도우에 알림 이벤트 전송
