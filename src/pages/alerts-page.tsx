@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import { Bell, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock, ExternalLink } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area.tsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useAppStore } from '@/store/app-store';
@@ -22,6 +23,7 @@ interface AlertItem {
   WRITER: string;
   REQ_DATE: string;
   REQ_DATE_ALL: string;
+  COMPLETE_DATE_ALL: string;
 }
 
 // 페이지네이션 정보 인터페이스
@@ -93,6 +95,14 @@ export function AlertsPage() {
     }
   };
 
+  // 텍스트 자르기 함수
+  function truncateText(text: string, maxLength: number): { isTruncated: boolean; displayText: string } {
+    if (text.length <= maxLength) {
+      return { isTruncated: false, displayText: text };
+    }
+    return { isTruncated: true, displayText: text.slice(0, maxLength) + '...' };
+  }
+
   // 페이지 변경 핸들러
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > pagination.totalPages) return;
@@ -102,6 +112,11 @@ export function AlertsPage() {
   // 페이지 크기 변경 핸들러
   const handlePageSizeChange = (newSize: string) => {
     const size = Number.parseInt(newSize, 10);
+    setPagination((prev) => ({
+      ...prev,
+      pageSize: size,
+      page: 1,
+    }));
     loadAlerts(1, size); // 페이지 크기가 변경되면 첫 페이지로 이동
   };
 
@@ -191,84 +206,133 @@ export function AlertsPage() {
             </div>
 
             {alerts.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">{'알림 내역이 없습니다'}</div>
+              <div className="text-center py-4 text-muted-foreground text-sm">{'알림 내역이 없습니다'}</div>
             ) : (
-              <ScrollArea className="h-[380px]">
-                <div className="space-y-4">
-                  {alerts.map((alert) => (
-                    <div key={alert.SR_IDX} className={`p-4 border rounded-lg transition-colors`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-medium flex items-center gap-2">
-                          <span>
-                            {alert.CM_NAME} - {alert.REQ_TITLE}
-                          </span>
-                        </h3>
-                        <Badge variant={getStatusVariant(alert.STATUS)}>{alert.STATUS}</Badge>
-                      </div>
-                      <div className="flex items-center text-sm text-muted-foreground mb-3">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {alert.REQ_DATE_ALL}
-                        <span className="mx-2">•</span>
-                        <span>{alert.WRITER}</span>
-                      </div>
-                      <div className="flex justify-end gap-2 mt-2">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => viewRequest(alert.SR_IDX)}>
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                접수건 보기
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>업무 사이트에서 접수건 상세 보기</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
+              <div className="w-full">
+                <ScrollArea className="h-[360px]">
+                  <Table className="border-collapse w-full table-fixed">
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow className="border-b border-t hover:bg-transparent">
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[15%]">고객사</TableHead>
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[40%]">제목</TableHead>
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[10%]">상태</TableHead>
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[10%]">처리자</TableHead>
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[20%]">요청일시</TableHead>
+                        <TableHead className="h-8 text-xs font-medium py-1 px-2 w-[5%]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {alerts.map((alert, index) => {
+                        const companyName = truncateText(alert.CM_NAME, 10);
+                        const title = truncateText(alert.REQ_TITLE, 40);
+
+                        return (
+                          <TableRow key={alert.SR_IDX} className={`hover:bg-muted/30 border-b ${index % 2 === 1 ? 'bg-muted/10' : ''}`}>
+                            <TableCell className="py-1 px-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className={companyName.isTruncated ? 'cursor-help' : ''}>{companyName.displayText}</span>
+                                  </TooltipTrigger>
+                                  {companyName.isTruncated && (
+                                    <TooltipContent side="bottom" className="max-w-sm">
+                                      <p className="text-sm">{alert.CM_NAME}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
+                            <TableCell className="py-1 px-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className={title.isTruncated ? 'cursor-help' : ''}>{title.displayText}</span>
+                                  </TooltipTrigger>
+                                  {title.isTruncated && (
+                                    <TooltipContent side="bottom" className="max-w-sm">
+                                      <p className="text-sm">{alert.REQ_TITLE}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
+                            <TableCell className="py-1 px-2">
+                              <Badge variant={getStatusVariant(alert.STATUS)} className="text-[10px] px-1 py-0 h-5">
+                                {alert.STATUS}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-1 px-2 text-xs">{alert.WRITER}</TableCell>
+                            <TableCell className="py-1 px-2 text-xs text-muted-foreground">{alert.REQ_DATE_ALL}</TableCell>
+                            <TableCell className="py-1 px-2">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => viewRequest(alert.SR_IDX)}>
+                                      <ExternalLink className="h-3 w-3" />
+                                      <span className="sr-only">접수건 보기</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs">업무 사이트에서 접수건 상세 보기</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
             )}
           </>
         )}
       </CardContent>
       {pagination.totalAlerts > 0 && (
-        <CardFooter className="flex justify-between items-center border-t pt-4">
-          <div className="text-sm text-muted-foreground">
+        <CardFooter className="flex justify-between items-center border-t py-2 px-4">
+          <div className="text-xs text-muted-foreground">
             {startItem}-{endItem} / 총 {pagination.totalAlerts}개
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" onClick={() => handlePageChange(1)} disabled={pagination.page === 1 || isLoading}>
-              <ChevronsLeft className="h-4 w-4" />
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => handlePageChange(1)}
+              disabled={pagination.page === 1 || isLoading}
+            >
+              <ChevronsLeft className="h-3 w-3" />
             </Button>
             <Button
               variant="outline"
               size="icon"
+              className="h-6 w-6"
               onClick={() => handlePageChange(pagination.page - 1)}
               disabled={pagination.page === 1 || isLoading}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3 w-3" />
             </Button>
-            <span className="mx-2 text-sm">
+            <span className="mx-1 text-xs">
               {pagination.page} / {pagination.totalPages}
             </span>
             <Button
               variant="outline"
               size="icon"
+              className="h-6 w-6"
               onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page === pagination.totalPages || isLoading}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3 w-3" />
             </Button>
             <Button
               variant="outline"
               size="icon"
+              className="h-6 w-6"
               onClick={() => handlePageChange(pagination.totalPages)}
               disabled={pagination.page === pagination.totalPages || isLoading}
             >
-              <ChevronsRight className="h-4 w-4" />
+              <ChevronsRight className="h-3 w-3" />
             </Button>
           </div>
         </CardFooter>

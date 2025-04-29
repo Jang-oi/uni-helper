@@ -340,6 +340,7 @@ async function checkForNewRequests() {
         WRITER: item['WRITER'],
         REQ_DATE: item['REQ_DATE'],
         REQ_DATE_ALL: item['REQ_DATE_ALL'],
+        COMPLETE_DATE_ALL: item['COMPLETE_DATE_ALL'],
       }));
 
     // 새 알림만 필터링
