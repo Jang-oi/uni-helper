@@ -29,10 +29,8 @@ export function setMainWindow(window) {
 }
 
 // 외부 링크 열기
-const openUniPost = (srIdx) => {
-  setTimeout(() => {
-    shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
-  }, 300);
+const openUniPost = async (srIdx) => {
+  await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
 };
 
 // 현재 시간이 업무 시간인지 확인 (평일 07:00 ~ 20:00)
@@ -165,7 +163,7 @@ async function performLogin(username, password) {
     return { success: false, message: error.toString() };
   } finally {
     if (!loginWindow.isDestroyed()) {
-      loginWindow.close();
+      // loginWindow.close();
     }
   }
 }
@@ -248,7 +246,7 @@ async function scrapeDataFromSite() {
       dataWindow.webContents.openDevTools({ mode: 'detach' });
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // iframe 내 데이터 스크래핑
     const result = await dataWindow.webContents.executeJavaScript(`
@@ -261,8 +259,12 @@ async function scrapeDataFromSite() {
               const iframe = document.getElementById(tabId);
               
               if (!iframe || !iframe.contentWindow) return { success: false, message: "iframe을 찾을 수 없습니다" };
-              iframe.contentDocument.querySelector('#nowMonth').click();
-              await new Promise((resolve) => setTimeout(resolve, 5000));
+              iframe.contentWindow.UNIUX.SVC('PROGRESSION_TYPE', 'R,E,O,A,C,N,M');
+              iframe.contentWindow.UNIUX.SVC('START_DATE', new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]);
+              iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE', '4');
+              iframe.contentDocument.querySelector('#doSearch').click();
+              
+              await new Promise((resolve) => setTimeout(resolve, 2000));
               
               const grid = iframe.contentWindow.grid;
               const gridData = grid.getAllRowValue();
@@ -290,7 +292,11 @@ async function scrapeDataFromSite() {
   }
 }
 
-// 모니터링 함수
+/**
+ * 새 요청 사항을 확인하는 모니터링 함수
+ * 완료된 상태의 항목은 제외하고 저장
+ * @returns {Promise<{success: boolean, message?: string, error?: string}>}
+ */
 async function checkForNewRequests() {
   try {
     // 업무 시간 체크
@@ -314,61 +320,64 @@ async function checkForNewRequests() {
     if (!result.success) return { success: false, message: result.message };
 
     const data = result.data;
-    if (data.length > 0) {
-      const existingAlerts = store.get('alerts') || [];
-      const existingMap = new Map(existingAlerts.map((alert) => [alert.SR_IDX, alert]));
+    if (!data || data.length === 0) return { success: true, message: '새로운 데이터가 없습니다' };
 
-      // 업데이트된 알림 리스트 만들기
-      const updatedAlerts = data.map((item) => {
-        const existing = existingMap.get(item['SR_IDX']);
+    // 기존 알림 불러오기
+    const existingAlerts = store.get('alerts') || [];
+    const existingMap = new Map(existingAlerts.map((alert) => [alert.SR_IDX, alert]));
 
-        return {
-          SR_IDX: item['SR_IDX'],
-          REQ_TITLE: item['REQ_TITLE'],
-          CM_NAME: item['CM_NAME'],
-          STATUS: item['STATUS'],
-          WRITER: item['WRITER'],
-          REQ_DATE: item['REQ_DATE'],
-          REQ_DATE_ALL: item['REQ_DATE_ALL'],
-          isNew: !existing, // 새 항목이면 true
-        };
-      });
+    // 특정 상태('처리중', '고객사답변', '접수', '검토')인 항목만 필터링하여 업데이트된 알림 리스트 만들기
+    const allowedStatuses = ['처리중', '고객사답변', '접수', '검토'];
 
-      // 새 알림만 필터링
-      const newAlerts = updatedAlerts.filter((alert) => !existingMap.has(alert.SR_IDX));
+    // 항목 필터링하여 업데이트된 알림 리스트 만들기
+    const updatedAlerts = data
+      .filter((item) => allowedStatuses.includes(item['STATUS']))
+      .map((item) => ({
+        SR_IDX: item['SR_IDX'],
+        REQ_TITLE: item['REQ_TITLE'],
+        CM_NAME: item['CM_NAME'],
+        STATUS: item['STATUS'],
+        WRITER: item['WRITER'],
+        REQ_DATE: item['REQ_DATE'],
+        REQ_DATE_ALL: item['REQ_DATE_ALL'],
+      }));
 
-      if (newAlerts.length > 0) {
-        store.set('alerts', updatedAlerts); // 기존 + 업데이트 모두 반영
-
-        // 새 알림이 있을 때 메인 윈도우에 알림 이벤트 전송 (추가)
-        if (mainWindow) mainWindow.webContents.send('new-alerts-available', newAlerts.length);
-
-        newAlerts.forEach((alert) => {
-          const notification = new Notification({
-            title: `📬 ${alert.REQ_TITLE}`,
-            body: `💡 상태: ${alert.STATUS}\n🕒 요청 시간: ${alert.REQ_DATE_ALL}`,
-          });
-
-          notification.on('click', async () => {
-            const alerts = store.get('alerts') || [];
-            const updated = alerts.map((a) => (a.SR_IDX === alert.SR_IDX ? { ...a, isNew: false } : a));
-            store.set('alerts', updated);
-
-            openUniPost(alert.SR_IDX);
-          });
-
-          notification.show();
-        });
-      }
-
-      return { success: true, newAlerts: newAlerts.length };
-    }
-
-    return { success: true, newAlerts: 0 };
+    // 새 알림만 필터링
+    const newAlerts = updatedAlerts.filter((alert) => !existingMap.has(alert.SR_IDX));
+    // 알림 저장 (완료 상태 항목은 제외됨)
+    store.set('alerts', updatedAlerts);
+    // 메인 윈도우에 알림 이벤트 전송
+    if (mainWindow) mainWindow.webContents.send('new-alerts-available');
+    // 새로운 알림이 있는 경우 시스템 알림 표시
+    if (existingAlerts.length > 0) displayNotifications(newAlerts);
+    return {
+      success: true,
+      message: `${updatedAlerts.length}개 항목 업데이트 (${newAlerts.length}개 신규)`,
+    };
   } catch (error) {
     console.error('모니터링 중 오류:', error);
     return { success: false, error: error.toString() };
   }
+}
+
+/**
+ * 시스템 알림을 표시하는 함수
+ * @param {Array} alerts - 표시할 알림 목록
+ */
+function displayNotifications(alerts) {
+  alerts.forEach((alert) => {
+    const notification = new Notification({
+      title: `🏢 ${alert.CM_NAME}`,
+      body: `📬 ${alert.REQ_TITLE}\n💡 상태: ${alert.STATUS}\n🕒 ${alert.REQ_DATE_ALL}`,
+      icon: path.join(__dirname, 'favicon.ico'),
+    });
+
+    notification.on('click', async () => {
+      await openUniPost(alert.SR_IDX);
+    });
+
+    notification.show();
+  });
 }
 
 // 모니터링 시작 함수
@@ -511,17 +520,14 @@ export function registerIpcHandlers() {
 
   // 모니터링 관련 핸들러
   ipcMain.handle('toggle-monitoring', async (event, status) => {
-    if (status) {
-      return startMonitoring();
-    } else {
-      return stopMonitoring();
-    }
+    if (status) return startMonitoring();
+    else return stopMonitoring();
   });
 
   // 요청 상세 보기 핸들러
   ipcMain.handle('open-request', async (event, srIdx) => {
     try {
-      openUniPost(srIdx);
+      await openUniPost(srIdx);
       return { success: true };
     } catch (error) {
       console.error('요청 상세 보기 중 오류:', error);

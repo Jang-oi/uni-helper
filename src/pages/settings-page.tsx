@@ -113,7 +113,6 @@ export function SettingsPage() {
 
       const result = await window.electron.invoke('toggle-monitoring', newStatus);
 
-      console.log(result);
       if (result.success) {
         setMonitoring(newStatus);
         if (newStatus) {

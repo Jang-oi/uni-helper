@@ -22,7 +22,6 @@ interface AlertItem {
   WRITER: string;
   REQ_DATE: string;
   REQ_DATE_ALL: string;
-  isNew: boolean;
 }
 
 // 페이지네이션 정보 인터페이스
@@ -37,11 +36,11 @@ interface PaginationInfo {
 function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   const statusLower = status.toLowerCase();
 
-  if (statusLower.includes('접수') || statusLower.includes('신규')) {
+  if (statusLower.includes('접수')) {
     return 'default';
-  } else if (statusLower.includes('진행') || statusLower.includes('처리')) {
+  } else if (statusLower.includes('요청')) {
     return 'secondary';
-  } else if (statusLower.includes('지연') || statusLower.includes('보류')) {
+  } else if (statusLower.includes('처리') || statusLower.includes('고객사')) {
     return 'destructive';
   } else {
     return 'outline';
@@ -106,18 +105,9 @@ export function AlertsPage() {
     loadAlerts(1, size); // 페이지 크기가 변경되면 첫 페이지로 이동
   };
 
-  // 탭 변경 시 알림 다시 로드
-  useEffect(() => {
-    if (isMonitoring) {
-      loadAlerts(1, pagination.pageSize); // 탭이 변경되면 첫 페이지로 이동
-    }
-  }, [isMonitoring]);
-
   // 모니터링 상태 변경 시 알림 목록 로드
   useEffect(() => {
-    if (isMonitoring) {
-      loadAlerts();
-    }
+    if (isMonitoring) loadAlerts();
   }, [isMonitoring]);
 
   // 이벤트 리스너 등록
@@ -129,12 +119,8 @@ export function AlertsPage() {
 
     // 새 알림 이벤트 리스너 등록 - 모니터링 중일 때만 자동 업데이트
     const newAlertsListener = window.electron.on('new-alerts-available', () => {
-      if (isMonitoring) {
-        loadAlerts(); // 현재 페이지 유지하면서 새로고침
-        toast.info('새로운 알림이 있습니다', {
-          description: '알림 목록이 자동으로 업데이트되었습니다.',
-        });
-      }
+      console.log('새 알림 이벤트 수신됨');
+      if (isMonitoring) loadAlerts(pagination.page, pagination.pageSize); // 현재 페이지 유지하면서 새로고침
     });
 
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
@@ -158,7 +144,7 @@ export function AlertsPage() {
   const endItem = Math.min(pagination.page * pagination.pageSize, pagination.totalAlerts);
 
   return (
-    <Card>
+    <Card className="max-w-5xl mx-auto">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="flex items-center gap-2">
@@ -210,13 +196,9 @@ export function AlertsPage() {
               <ScrollArea className="h-[380px]">
                 <div className="space-y-4">
                   {alerts.map((alert) => (
-                    <div
-                      key={alert.SR_IDX}
-                      className={`p-4 border rounded-lg transition-colors ${alert.isNew ? 'bg-muted border-primary/20' : ''}`}
-                    >
+                    <div key={alert.SR_IDX} className={`p-4 border rounded-lg transition-colors`}>
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-medium flex items-center gap-2">
-                          {alert.isNew && <span className="w-2 h-2 bg-primary rounded-full" aria-hidden="true" />}
                           <span>
                             {alert.CM_NAME} - {alert.REQ_TITLE}
                           </span>
