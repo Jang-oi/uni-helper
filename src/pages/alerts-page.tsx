@@ -49,6 +49,72 @@ function getStatusVariant(status: string): 'default' | 'secondary' | 'destructiv
   }
 }
 
+// 긴급 알림 확인
+function isUrgent(title: string): boolean {
+  return title.includes('긴급');
+}
+
+// 처리 지연 확인 (REQ_DATE와 PROCESS_DATE 간 일주일 이상 차이)
+function isDelayed(reqDate: string, processDate: string): boolean {
+  if (!reqDate || !processDate) return false;
+
+  const reqTime = new Date(reqDate).getTime();
+  const processTime = new Date(processDate).getTime();
+  const weekInMs = 7 * 24 * 60 * 60 * 1000;
+
+  return processTime - reqTime > weekInMs;
+}
+
+// 접수 후 장시간 미처리 확인 (STATUS가 '접수'이고 1시간 이상 경과)
+function isPending(status: string, reqDateAll: string): boolean {
+  if (!status.includes('접수') || !reqDateAll) return false;
+
+  const reqTime = new Date(reqDateAll).getTime();
+  const currentTime = new Date().getTime();
+  const hourInMs = 60 * 60 * 1000;
+
+  return currentTime - reqTime > hourInMs;
+}
+
+// 알림 상태에 따른 행 스타일 결정
+function getRowStyle(alert: AlertItem): string {
+  if (isUrgent(alert.REQ_TITLE)) {
+    return 'bg-red-50 dark:bg-red-950/20 animate-pulse';
+  } else if (isDelayed(alert.REQ_DATE, alert.PROCESS_DATE)) {
+    return 'bg-amber-50 dark:bg-amber-950/20 animate-pulse';
+  } else if (isPending(alert.STATUS, alert.REQ_DATE_ALL)) {
+    return 'bg-blue-50 dark:bg-blue-950/20 animate-pulse';
+  }
+
+  return '';
+}
+
+// 알림 상태에 따른 제목 스타일 결정
+function getTitleStyle(alert: AlertItem): string {
+  if (isUrgent(alert.REQ_TITLE)) {
+    return 'font-bold text-red-600 dark:text-red-400 flex items-center gap-1';
+  } else if (isDelayed(alert.REQ_DATE, alert.PROCESS_DATE)) {
+    return 'font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1';
+  } else if (isPending(alert.STATUS, alert.REQ_DATE_ALL)) {
+    return 'font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1';
+  }
+
+  return '';
+}
+
+// 알림 상태에 따른 인디케이터 표시
+function getIndicator(alert: AlertItem) {
+  if (isUrgent(alert.REQ_TITLE)) {
+    return <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-ping mr-1" />;
+  } else if (isDelayed(alert.REQ_DATE, alert.PROCESS_DATE)) {
+    return <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-ping mr-1" />;
+  } else if (isPending(alert.STATUS, alert.REQ_DATE_ALL)) {
+    return <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 animate-ping mr-1" />;
+  }
+
+  return null;
+}
+
 export function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -209,6 +275,23 @@ export function AlertsPage() {
               <div className="text-center py-4 text-muted-foreground text-sm">{'알림 내역이 없습니다'}</div>
             ) : (
               <div className="w-full">
+                <div className="mb-4 p-3 bg-muted/20 rounded-md text-sm">
+                  <h4 className="font-medium mb-2">알림 표시 안내:</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                      <span className="text-red-600 dark:text-red-400">긴급 요청 (제목에 "긴급" 포함)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                      <span className="text-amber-600 dark:text-amber-400">처리 지연 (1주일 이상 소요)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 animate-ping" />
+                      <span className="text-blue-600 dark:text-blue-400">접수 후 1시간 이상 미처리</span>
+                    </div>
+                  </div>
+                </div>
                 <ScrollArea className="h-[360px]">
                   <Table className="border-collapse w-full table-fixed">
                     <TableHeader className="sticky top-0 bg-background z-10">
@@ -224,10 +307,16 @@ export function AlertsPage() {
                     <TableBody>
                       {alerts.map((alert, index) => {
                         const companyName = truncateText(alert.CM_NAME, 10);
-                        const title = truncateText(alert.REQ_TITLE, 40);
+                        const title = truncateText(alert.REQ_TITLE, 35);
+                        const rowStyle = getRowStyle(alert);
+                        const titleStyle = getTitleStyle(alert);
+                        const indicator = getIndicator(alert);
 
                         return (
-                          <TableRow key={alert.SR_IDX} className={`hover:bg-muted/30 border-b ${index % 2 === 1 ? 'bg-muted/10' : ''}`}>
+                          <TableRow
+                            key={alert.SR_IDX}
+                            className={`hover:bg-muted/30 border-b ${rowStyle || (index % 2 === 1 ? 'bg-muted/10' : '')}`}
+                          >
                             <TableCell className="py-1 px-2 text-xs overflow-hidden text-ellipsis whitespace-nowrap">
                               <TooltipProvider>
                                 <Tooltip>
@@ -246,7 +335,10 @@ export function AlertsPage() {
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className={title.isTruncated ? 'cursor-help' : ''}>{title.displayText}</span>
+                                    <span className={`${titleStyle}`}>
+                                      {indicator}
+                                      {title.displayText}
+                                    </span>
                                   </TooltipTrigger>
                                   {title.isTruncated && (
                                     <TooltipContent side="bottom" className="max-w-sm">

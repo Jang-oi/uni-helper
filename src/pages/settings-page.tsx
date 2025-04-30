@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Clock, Mail } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -18,7 +18,6 @@ const formSchema = z.object({
   username: z.string().min(1, { message: '아이디를 입력해주세요' }),
   password: z.string().min(1, { message: '비밀번호를 입력해주세요' }),
   checkInterval: z.coerce.number().min(1, { message: '최소 1분 이상 설정해주세요' }).max(60, { message: '최대 60분까지 설정 가능합니다' }),
-  email: z.string().email({ message: '유효한 이메일 주소를 입력해주세요' }).optional().or(z.literal('')),
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -34,7 +33,6 @@ export function SettingsPage() {
       username: '',
       password: '',
       checkInterval: 5,
-      email: '',
     },
   });
 
@@ -76,12 +74,11 @@ export function SettingsPage() {
         const settings = await window.electron.invoke('get-settings');
         if (settings) {
           // 설정 적용
-          const { username, password, checkInterval, email } = settings;
+          const { username, password, checkInterval } = settings;
           form.reset({
             username,
             password,
             checkInterval,
-            email: email || '',
           });
         }
       } catch (error) {
@@ -185,23 +182,6 @@ export function SettingsPage() {
                         <Input type="number" min={1} max={60} {...field} disabled={isMonitoring} />
                       </FormControl>
                       <FormDescription>업무 사이트를 확인할 주기를 분 단위로 설정하세요. (최소 1분)</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>알림 이메일</FormLabel>
-                      <FormControl>
-                        <div className="flex items-center space-x-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <Input {...field} placeholder="알림을 받을 이메일 주소" disabled={isMonitoring} />
-                        </div>
-                      </FormControl>
-                      <FormDescription>업데이트 알림을 받을 이메일 주소를 입력하세요. (처리내역이 고객사 답변으로 변경 시)</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
