@@ -251,29 +251,52 @@ async function scrapeDataFromSite() {
     // iframe 내 데이터 스크래핑
     const result = await dataWindow.webContents.executeJavaScript(`
       (async function() {
-            try {
-              const li = document.querySelector('li[title="요청내역관리"], li[name="요청내역관리"]');
-              if (!li) return { success: false, message: "요청내역관리 탭을 찾을 수 없습니다" };
-              
-              const tabId = li.getAttribute('aria-controls');
-              const iframe = document.getElementById(tabId);
-              
-              if (!iframe || !iframe.contentWindow) return { success: false, message: "iframe을 찾을 수 없습니다" };
-              iframe.contentWindow.UNIUX.SVC('PROGRESSION_TYPE', 'R,E,O,A,C,N,M');
-              iframe.contentWindow.UNIUX.SVC('START_DATE', new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]);
-              // const currentTeam = iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE').split(',')[0]
-              // iframe.contentWindow.UNIUX.SVC('UNIDOCU_PART_TYPE', currentTeam);
-              iframe.contentDocument.querySelector('#doSearch').click();
-              
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              
-              const grid = iframe.contentWindow.grid;
-              const gridData = grid.getAllRowValue();
-
-              return { success: true, data: gridData };
-            } catch (error) {
-              return { success: false, message: "데이터 스크래핑 오류: " + error.message };
+        function waitForLoadingToFinish(iframeDoc) {
+          return new Promise((resolve) => {
+            const loadingArea = iframeDoc.querySelector('.loading-area');
+            if (!loadingArea) {
+              resolve(); // 로딩 표시가 없으면 즉시 완료
+              return;
             }
+    
+            const checkDisplay = () => {
+              const style = window.getComputedStyle(loadingArea);
+              if (style.display === 'none') {
+                clearInterval(interval);
+                resolve();
+              }
+            };
+    
+            const interval = setInterval(checkDisplay, 100);
+            checkDisplay();
+          });
+        }
+    
+        try {
+          const li = document.querySelector('li[title="요청내역관리"], li[name="요청내역관리"]');
+          if (!li) return { success: false, message: "요청내역관리 탭을 찾을 수 없습니다" };
+          
+          const tabId = li.getAttribute('aria-controls');
+          const iframe = document.getElementById(tabId);
+          if (!iframe || !iframe.contentWindow) return { success: false, message: "iframe을 찾을 수 없습니다" };
+          
+          iframe.contentWindow.UNIUX.SVC('PROGRESSION_TYPE', 'R,E,O,A,C,N,M');
+          iframe.contentWindow.UNIUX.SVC(
+            'START_DATE',
+            new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0]
+          );
+    
+          iframe.contentDocument.querySelector('#doSearch').click();
+    
+          await waitForLoadingToFinish(iframe.contentDocument);
+    
+          const grid = iframe.contentWindow.grid;
+          const gridData = grid.getAllRowValue();
+    
+          return { success: true, data: gridData };
+        } catch (error) {
+          return { success: false, message: "데이터 스크래핑 오류: " + error.message };
+        }
       })();
     `);
 

@@ -26,7 +26,6 @@ async function createWindow() {
   });
 
   const indexPath = path.join(__dirname, '../build/index.html') // 패키징된 앱에서의 경로
-
   if (process.env.NODE_ENV === "development") await mainWindow.loadURL("http://localhost:5173")
   else await mainWindow.loadFile(indexPath);
 
@@ -37,8 +36,15 @@ async function createWindow() {
   electronLocalShortcut.register(mainWindow, 'F12', () => {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
-
   // 메인 윈도우 참조 설정
+
+  mainWindow.on('close', (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();  // 창 닫기 방지
+      mainWindow.hide();       // 대신 창 숨김
+    }
+  });
+
   setMainWindow(mainWindow);
 }
 
