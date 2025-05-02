@@ -236,8 +236,8 @@ export function AlertsPage() {
                                     <span>{companyName.displayText}</span>
                                   </TooltipTrigger>
                                   {companyName.isTruncated && (
-                                    <TooltipContent side="bottom" className="max-w-sm">
-                                      <p className="text-sm">{alert.CM_NAME}</p>
+                                    <TooltipContent>
+                                      <p className="text-xs">{alert.CM_NAME}</p>
                                     </TooltipContent>
                                   )}
                                 </Tooltip>
@@ -253,8 +253,8 @@ export function AlertsPage() {
                                     </span>
                                   </TooltipTrigger>
                                   {title.isTruncated && (
-                                    <TooltipContent side="bottom" className="max-w-sm">
-                                      <p className="text-sm">{alert.REQ_TITLE}</p>
+                                    <TooltipContent>
+                                      <p className="text-xs">{alert.REQ_TITLE}</p>
                                     </TooltipContent>
                                   )}
                                 </Tooltip>

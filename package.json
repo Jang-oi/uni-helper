@@ -107,6 +107,9 @@
     },
     "publish": {
       "provider": "github"
+    },
+    "author": {
+      "name": "Unipost"
     }
   }
 }
