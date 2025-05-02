@@ -13,6 +13,13 @@ const validChannels = [
     // 알림 상태 관련
     "open-request",
     "new-alerts-available",
+
+    // 프로그램 관련
+    'get-app-info',
+    'check-for-updates',
+    'download-update',
+    'install-update',
+    'update-status',
 ]
 
 // Expose protected methods that allow the renderer process to use

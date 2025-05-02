@@ -14,6 +14,7 @@ import { LoadingOverlay } from '@/components/loading-overlay';
 import { ThemeProvider } from '@/components/theme-provider';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
+import { UniAlertDialog } from '@/components/uni-alert-dialog.tsx';
 
 import { useAppStore } from '@/store/app-store';
 
@@ -63,7 +64,7 @@ export function App() {
     <ThemeProvider defaultTheme="light" storageKey="app-theme">
       <LoadingOverlay isVisible={isLoading || isInitializing} message={isInitializing ? '앱 초기화 중...' : loadingMessage} />
       <ElectronErrorModal isOpen={showElectronError} onReload={handleReload} />
-
+      <UniAlertDialog />
       <HashRouter>
         <SidebarProvider>
           <AppSidebar />

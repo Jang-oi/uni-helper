@@ -1,11 +1,15 @@
-import { BrowserWindow, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
 import Store from 'electron-store';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 // ES 모듈에서는 __dirname이 없으므로 직접 생성
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const require = createRequire(import.meta.url);
+const { autoUpdater } = require('electron-updater');
 
 // 상수 정의
 const SUPPORT_URL = 'https://114.unipost.co.kr/home.uni';
@@ -19,9 +23,61 @@ let isMonitoring = false;
 let monitoringInterval = null;
 let isLoggedIn = false;
 
+// 개발 환경에서 사용할 시뮬레이션 변수
+let simulatedVersion = null;
+
 // 메인 윈도우 설정 함수
 export function setMainWindow(window) {
   mainWindow = window;
+
+  // 자동 업데이트 이벤트 설정
+  setupAutoUpdater();
+}
+
+// 자동 업데이트 설정
+function setupAutoUpdater() {
+  // 개발 환경에서는 자동 업데이트 비활성화
+  if (process.env.NODE_ENV === 'development') {
+    console.log('개발 환경에서는 자동 업데이트가 비활성화됩니다.');
+    return;
+  }
+
+  // 업데이트 로그 설정
+  autoUpdater.logger = console;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  // 업데이트 이벤트 리스너 설정
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus('checking');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus('available', info);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    sendUpdateStatus('not-available', info);
+  });
+
+  autoUpdater.on('error', (err) => {
+    sendUpdateStatus('error', { error: err.toString() });
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    sendUpdateStatus('progress', progressObj);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus('downloaded', info);
+  });
+}
+
+// 업데이트 상태 전송 함수
+function sendUpdateStatus(status, data = {}) {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', { status, ...data });
+  }
 }
 
 // 외부 링크 열기
@@ -551,6 +607,89 @@ function getAlerts() {
   }
 }
 
+// 앱 버전 정보 가져오기
+function getAppInfo() {
+  return {
+    version: simulatedVersion || app.getVersion(),
+    name: app.getName(),
+    isDevMode: process.env.NODE_ENV === 'development',
+  };
+}
+
+// 개발 환경에서 업데이트 시뮬레이션 함수
+function simulateUpdateCheck(newVersion) {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  simulatedVersion = newVersion;
+
+  // 버전 비교 (현재 버전보다 높은 경우에만 업데이트 있음)
+  const currentVersion = app.getVersion();
+  const hasUpdate = compareVersions(newVersion, currentVersion) > 0;
+
+  // 업데이트 확인 중 상태 전송
+  sendUpdateStatus('checking');
+
+  // 1초 후 결과 전송
+  setTimeout(() => {
+    if (hasUpdate) {
+      sendUpdateStatus('available', { version: newVersion, releaseDate: new Date().toISOString() });
+    } else {
+      sendUpdateStatus('not-available', { version: currentVersion });
+    }
+  }, 1000);
+}
+
+// 버전 비교 함수 (semver 형식: x.y.z)
+function compareVersions(v1, v2) {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+
+  for (let i = 0; i < 3; i++) {
+    if (parts1[i] > parts2[i]) return 1;
+    if (parts1[i] < parts2[i]) return -1;
+  }
+
+  return 0;
+}
+
+// 개발 환경에서 업데이트 다운로드 시뮬레이션
+function simulateUpdateDownload() {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  let percent = 0;
+  const interval = setInterval(() => {
+    percent += 10;
+    sendUpdateStatus('progress', { percent });
+
+    if (percent >= 100) {
+      clearInterval(interval);
+      sendUpdateStatus('downloaded', { version: simulatedVersion });
+    }
+  }, 500);
+}
+
+// 개발 환경에서 업데이트 설치 시뮬레이션
+function simulateUpdateInstall() {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  // 설치 완료 메시지 표시
+  sendUpdateStatus('installing');
+
+  // 3초 후 앱 재시작 시뮬레이션
+  setTimeout(() => {
+    if (mainWindow) {
+      mainWindow.webContents.send('app-restarting');
+
+      // 5초 후 앱 새로고침 (실제 재시작 대신)
+      setTimeout(() => {
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.reload();
+        }
+      }, 2000);
+    }
+  }, 1000);
+}
+
 // IPC 핸들러 등록
 export function registerIpcHandlers() {
   // 설정 관련 핸들러
@@ -586,4 +725,82 @@ export function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-alerts', getAlerts);
+
+  // 앱 정보 핸들러
+  ipcMain.handle('get-app-info', () => {
+    return getAppInfo();
+  });
+
+  // 업데이트 관련 핸들러
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        // 개발 환경에서는 업데이트 확인을 시뮬레이션
+        return { success: true, message: '개발 환경에서는 업데이트 확인이 시뮬레이션됩니다.' };
+      }
+
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 확인 중 오류:', error);
+      sendUpdateStatus('error', { error: error.toString() });
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  ipcMain.handle('download-update', async () => {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        // 개발 환경에서는 다운로드를 시뮬레이션
+        simulateUpdateDownload();
+        return { success: true, message: '개발 환경에서는 다운로드가 시뮬레이션됩니다.' };
+      }
+
+      autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 다운로드 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  ipcMain.handle('install-update', () => {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        simulateUpdateInstall();
+        return { success: true, message: '개발 환경에서는 업데이트 설치가 시뮬레이션됩니다.' };
+      }
+
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 설치 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  // 개발 환경 시뮬레이션 핸들러
+  ipcMain.handle('simulate-update-check', async (event, newVersion) => {
+    if (process.env.NODE_ENV === 'development') {
+      simulateUpdateCheck(newVersion);
+      return { success: true };
+    }
+    return { success: false, message: '개발 환경에서만 사용 가능합니다.' };
+  });
+
+  ipcMain.handle('simulate-update-download', () => {
+    if (process.env.NODE_ENV === 'development') {
+      simulateUpdateDownload();
+      return { success: true };
+    }
+    return { success: false, message: '개발 환경에서만 사용 가능합니다.' };
+  });
+
+  ipcMain.handle('simulate-update-install', () => {
+    if (process.env.NODE_ENV === 'development') {
+      simulateUpdateInstall();
+      return { success: true };
+    }
+    return { success: false, message: '개발 환경에서만 사용 가능합니다.' };
+  });
 }
