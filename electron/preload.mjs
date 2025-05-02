@@ -8,10 +8,10 @@ const validChannels = [
 
     // 모니터링 관련
     "toggle-monitoring",
+    "get-alerts",
 
     // 알림 상태 관련
     "open-request",
-    "get-alerts-paginated",
     "new-alerts-available",
 ]
 

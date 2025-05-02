@@ -29,10 +29,6 @@ async function createWindow() {
   if (process.env.NODE_ENV === "development") await mainWindow.loadURL("http://localhost:5173")
   else await mainWindow.loadFile(indexPath);
 
-  electronLocalShortcut.register(mainWindow, 'F5', () => {
-    mainWindow.reload();
-  });
-
   electronLocalShortcut.register(mainWindow, 'F12', () => {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   });

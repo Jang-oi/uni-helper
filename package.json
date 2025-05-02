@@ -9,7 +9,7 @@
   "scripts": {
     "test": "concurrently \"vite\" \"cross-env NODE_ENV=development electron .\"",
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "build": "rimraf dist && vite build && electron-builder",
+    "build": "rimraf dist && rimraf build && vite build && electron-builder",
     "build:win": "rimraf dist && vite build && electron-builder --win --x64",
     "lint": "eslint .",
     "preview": "vite preview",

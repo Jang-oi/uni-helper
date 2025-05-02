@@ -1,5 +1,4 @@
 import { BrowserWindow, ipcMain, Notification, shell } from 'electron';
-import electronLocalShortcut from 'electron-localshortcut';
 import Store from 'electron-store';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,7 +9,6 @@ const __dirname = path.dirname(__filename);
 
 // 상수 정의
 const SUPPORT_URL = 'https://114.unipost.co.kr/home.uni';
-const SESSION_CHECK_INTERVAL = 50 * 60 * 1000; // 50분 (사이트 세션 만료 시간 1시간보다 짧게)
 const BUSINESS_HOURS_START = 7; // 오전 7시
 const BUSINESS_HOURS_END = 20; // 오후 8시
 
@@ -19,8 +17,6 @@ const store = new Store();
 let mainWindow, dataWindow;
 let isMonitoring = false;
 let monitoringInterval = null;
-let sessionCheckInterval = null;
-let businessHoursCheckInterval = null;
 let isLoggedIn = false;
 
 // 메인 윈도우 설정 함수
@@ -70,11 +66,6 @@ async function pauseMonitoring() {
     monitoringInterval = null;
   }
 
-  if (sessionCheckInterval) {
-    clearInterval(sessionCheckInterval);
-    sessionCheckInterval = null;
-  }
-
   isMonitoring = false;
   store.set('monitoringPaused', true); // 일시 중지 상태 저장
 }
@@ -86,9 +77,6 @@ async function resumeMonitoring() {
 
   // 모니터링 재개
   const interval = settings.checkInterval * 60 * 1000;
-
-  // 세션 체크 재개
-  sessionCheckInterval = setInterval(ensureLoggedIn, SESSION_CHECK_INTERVAL);
 
   // 모니터링 인터벌 재개
   monitoringInterval = setInterval(checkForNewRequests, interval);
@@ -236,16 +224,6 @@ async function scrapeDataFromSite() {
 
   try {
     await dataWindow.loadURL(SUPPORT_URL);
-
-    // 개발 편의를 위한 단축키 등록
-    electronLocalShortcut.register(dataWindow, 'F5', () => {
-      dataWindow.reload();
-    });
-
-    electronLocalShortcut.register(dataWindow, 'F12', () => {
-      dataWindow.webContents.openDevTools({ mode: 'detach' });
-    });
-
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // iframe 내 데이터 스크래핑
@@ -317,6 +295,83 @@ async function scrapeDataFromSite() {
 }
 
 /**
+ * 각 알림 항목에 상태 플래그를 추가하는 함수
+ * @param {Object} alert - 알림 항목
+ * @returns {Object} - 플래그가 추가된 알림 항목
+ */
+function addStatusFlags(alert) {
+  // 알림 항목 복사
+  const alertWithFlags = { ...alert };
+
+  // 플래그 추가
+  // 1. 긴급 요청 (제목에 "긴급" 포함)
+  alertWithFlags.isUrgent = alertWithFlags.REQ_TITLE && alertWithFlags.REQ_TITLE.includes('긴급');
+
+  // 2. 처리 지연 (1주일 이상 소요)
+  alertWithFlags.isDelayed = false;
+  if (alertWithFlags.PROCESS_DATE) {
+    const processTime = new Date(alertWithFlags.PROCESS_DATE).getTime();
+    const todayTime = new Date().getTime();
+    const weekInMs = 7 * 24 * 60 * 60 * 1000;
+    alertWithFlags.isDelayed = todayTime - processTime > weekInMs;
+  }
+
+  // 3. 접수 후 1시간 이상 미처리
+  alertWithFlags.isPending = false;
+  if (alertWithFlags.STATUS.includes('접수') && alertWithFlags.REQ_DATE_ALL) {
+    const reqTime = new Date(alertWithFlags.REQ_DATE_ALL).getTime();
+    const currentTime = new Date().getTime();
+    const hourInMs = 60 * 60 * 1000;
+    alertWithFlags.isPending = currentTime - reqTime > hourInMs;
+  }
+
+  return alertWithFlags;
+}
+/**
+ * 알림 정렬 함수
+ * 우선순위: 고객사답변 → 처리중 → 긴급요청 → 처리지연 → 접수후 1시간 미처리 → 최신순
+ * @param {Array} alerts - 정렬할 알림 배열
+ * @returns {Array} - 정렬된 알림 배열
+ */
+function sortAlerts(alerts) {
+  // 각 알림 항목에 플래그 추가
+  const alertsWithFlags = alerts.map((alert) => addStatusFlags(alert));
+
+  return alertsWithFlags.sort((a, b) => {
+    // 상태에 따른 우선순위 점수 부여
+    const getPriorityScore = (alert) => {
+      const status = alert.STATUS;
+
+      // 정확한 상태 매칭을 위한 우선순위 점수
+      if (status === '고객사답변') return 100;
+      if (status === '처리중') return 90;
+
+      // 긴급 요청
+      if (alert.isUrgent) return 80;
+
+      // 처리 지연
+      if (alert.isDelayed) return 70;
+
+      // 접수 후 1시간 이상 미처리
+      if (alert.isPending) return 60;
+
+      return 0;
+    };
+
+    const aPriority = getPriorityScore(a);
+    const bPriority = getPriorityScore(b);
+
+    // 우선순위가 다르면 우선순위 기준으로 정렬
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority; // 높은 점수가 위로 오도록 내림차순 정렬
+    }
+
+    // 우선순위가 같으면 요청일시 기준 내림차순 정렬 (최신순)
+    return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+  });
+}
+
+/**
  * 새 요청 사항을 확인하는 모니터링 함수
  * 완료된 상태의 항목은 제외하고 저장
  * @returns {Promise<{success: boolean, message?: string, error?: string}>}
@@ -348,6 +403,7 @@ async function checkForNewRequests() {
 
     // 기존 알림 불러오기
     const existingAlerts = store.get('alerts') || [];
+
     // 항목 필터링하여 업데이트된 알림 리스트 만들기
     const updatedAlerts = data.map((item) => ({
       SR_IDX: item['SR_IDX'],
@@ -363,22 +419,35 @@ async function checkForNewRequests() {
     // 새 알림만 필터링
     // 새 알림 찾기 - 기존 알림에 없는 SR_IDX를 가진 항목들
     const newAlerts = updatedAlerts.filter((newAlert) => !existingAlerts.some((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX));
-    // 알림 저장 (완료 상태 항목은 제외됨)
-    store.set('alerts', updatedAlerts);
+
+    // 상태가 변경된 알림 찾기 (특히 고객사답변으로 변경된 경우)
+    const statusChangedAlerts = updatedAlerts.filter((newAlert) => {
+      const existingAlert = existingAlerts.find((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX);
+
+      // 기존 알림이 있고, 상태가 변경되었으며, 새 상태가 '고객사답변'인 경우
+      return existingAlert && existingAlert.STATUS !== newAlert.STATUS && newAlert.STATUS === '고객사답변';
+    });
+
+    // 알림 정렬 후 저장 (우선순위에 따라 정렬)
+    const sortedAlerts = sortAlerts(updatedAlerts);
+    store.set('alerts', sortedAlerts);
+
     // 메인 윈도우에 알림 이벤트 전송
     if (mainWindow) mainWindow.webContents.send('new-alerts-available');
-    // 새로운 알림이 있는 경우 시스템 알림 표시
+
+    // 최초 실행 시 알람이 여러번 발생하여 제어를 위해
     if (existingAlerts.length > 0) displayNotifications(newAlerts);
+    // 상태가 고객사답변으로 변경된 알림에 대해 별도 알림 표시
+    if (statusChangedAlerts.length > 0) displayNotifications(statusChangedAlerts);
     return {
       success: true,
-      message: `${updatedAlerts.length}개 항목 업데이트 (${newAlerts.length}개 신규)`,
+      message: `${updatedAlerts.length}개 항목 업데이트 (${newAlerts.length}개 신규, ${statusChangedAlerts.length}개 고객사답변 상태 변경)`,
     };
   } catch (error) {
     console.error('모니터링 중 오류:', error);
     return { success: false, error: error.toString() };
   }
 }
-
 /**
  * 시스템 알림을 표시하는 함수
  * @param {Array} alerts - 표시할 알림 목록
@@ -386,8 +455,8 @@ async function checkForNewRequests() {
 function displayNotifications(alerts) {
   alerts.forEach((alert) => {
     const notification = new Notification({
-      title: `🏢 ${alert.CM_NAME}`,
-      body: `📬 ${alert.REQ_TITLE}\n💡 상태: ${alert.STATUS}\n🕒 ${alert.REQ_DATE_ALL}`,
+      title: `${alert.CM_NAME}`,
+      body: `${alert.REQ_TITLE}\n상태: ${alert.STATUS}\n`,
       icon: path.join(__dirname, 'favicon.ico'),
     });
 
@@ -398,13 +467,10 @@ function displayNotifications(alerts) {
     notification.show();
   });
 }
-
 // 모니터링 시작 함수
 async function startMonitoring() {
   // 이미 실행 중인 인터벌 정리
   if (monitoringInterval) clearInterval(monitoringInterval);
-  if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-  if (businessHoursCheckInterval) clearInterval(businessHoursCheckInterval);
 
   // 설정 확인
   const settings = store.get('settings');
@@ -418,9 +484,7 @@ async function startMonitoring() {
   if (!withinBusinessHours) {
     // 업무 시간이 아니면 일시 중지 상태로 저장하고 다음 업무 시간에 자동 시작
     store.set('monitoringPaused', true);
-    // 업무 시간 체크 인터벌 설정 (1분마다)
-    businessHoursCheckInterval = setInterval(checkBusinessHours, 60000);
-    return { success: false, message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 자동으로 시작됩니다.' };
+    return { success: false, message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 시작 해주세요.' };
   }
 
   // 분을 밀리초로 변환
@@ -443,14 +507,6 @@ async function startMonitoring() {
     // 데이터 모니터링 인터벌 설정
     monitoringInterval = setInterval(checkForNewRequests, interval);
 
-    // 업무 시간 체크 및 세션 유지를 위한 인터벌 설정 (50분마다)
-    businessHoursCheckInterval = setInterval(async () => {
-      const withinBusinessHours = await checkBusinessHours();
-
-      // 업무 시간 내에만 세션 체크 수행
-      if (withinBusinessHours) await ensureLoggedIn();
-    }, SESSION_CHECK_INTERVAL);
-
     isMonitoring = true;
     store.delete('monitoringPaused'); // 일시 중지 상태 제거
 
@@ -468,52 +524,20 @@ function stopMonitoring() {
     monitoringInterval = null;
   }
 
-  if (sessionCheckInterval) {
-    clearInterval(sessionCheckInterval);
-    sessionCheckInterval = null;
-  }
-
-  if (businessHoursCheckInterval) {
-    clearInterval(businessHoursCheckInterval);
-    businessHoursCheckInterval = null;
-  }
-
   isMonitoring = false;
   store.delete('monitoringPaused'); // 일시 중지 상태 제거
 
   return { success: true, message: '모니터링이 중지되었습니다.' };
 }
 
-async function getAlertsWithPagination(event, { page = 1, pageSize = 10 }) {
+function getAlerts() {
   try {
     // 저장된 모든 알림 가져오기
-    let allAlerts = store.get('alerts') || [];
-
-    // 전체 알림 수
-    const totalAlerts = allAlerts.length;
-
-    // 전체 페이지 수 계산
-    const totalPages = Math.ceil(totalAlerts / pageSize);
-
-    // 현재 페이지에 해당하는 알림만 추출
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = Math.min(startIndex + pageSize, totalAlerts);
-    const paginatedAlerts = allAlerts.slice(startIndex, endIndex);
-
+    const allAlerts = store.get('alerts') || [];
     // 마지막 확인 시간
     const lastChecked = store.get('lastChecked') || null;
 
-    return {
-      success: true,
-      alerts: paginatedAlerts,
-      lastChecked,
-      pagination: {
-        page,
-        pageSize,
-        totalAlerts,
-        totalPages,
-      },
-    };
+    return { success: true, alerts: allAlerts, lastChecked };
   } catch (error) {
     console.error('알림 목록 조회 중 오류:', error);
     return { success: false, error: error.toString() };
@@ -554,5 +578,5 @@ export function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('get-alerts-paginated', getAlertsWithPagination);
+  ipcMain.handle('get-alerts', getAlerts);
 }
