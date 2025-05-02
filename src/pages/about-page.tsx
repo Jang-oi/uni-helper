@@ -6,15 +6,12 @@ import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { UpdateConfirmDialog } from '@/components/update-confirm-dialog';
 
 import { useAppStore } from '@/store/app-store';
-
-// 업데이트 상태 타입
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'confirm';
 
 // 앱 정보 타입
 interface AppInfo {
@@ -24,11 +21,9 @@ interface AppInfo {
 }
 
 export function AboutPage() {
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
-  const [downloadProgress, setDownloadProgress] = useState(0);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const { setLoading } = useAppStore();
+  // 전역 상태에서 업데이트 관련 상태 가져오기
+  const { setLoading, updateStatus, updateInfo, downloadProgress, setUpdateStatus, setUpdateInfo, setDownloadProgress } = useAppStore();
 
   // 앱 정보 로드
   useEffect(() => {
@@ -84,7 +79,7 @@ export function AboutPage() {
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, []);
+  }, [setDownloadProgress, setUpdateInfo, setUpdateStatus]);
 
   // 업데이트 확인 함수
   const checkForUpdates = async () => {
@@ -273,12 +268,6 @@ export function AboutPage() {
           </div>
         </CardContent>
         <Separator />
-        <CardFooter className="pt-4">
-          <div className="w-full text-xs text-muted-foreground">
-            <p>© 2024 Uni-Helper-App. All rights reserved.</p>
-            <p className="mt-1">업무 시간(평일 07:00~20:00)에만 모니터링이 작동합니다.</p>
-          </div>
-        </CardFooter>
       </Card>
     </div>
   );

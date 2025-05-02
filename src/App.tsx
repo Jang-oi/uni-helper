@@ -14,7 +14,7 @@ import { LoadingOverlay } from '@/components/loading-overlay';
 import { ThemeProvider } from '@/components/theme-provider';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
-import { UniAlertDialog } from '@/components/uni-alert-dialog.tsx';
+import { UniAlertDialog } from '@/components/uni-alert-dialog';
 
 import { useAppStore } from '@/store/app-store';
 

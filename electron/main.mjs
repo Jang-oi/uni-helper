@@ -48,13 +48,6 @@ const createTray = () => {
   tray = new Tray(path.join(__dirname, 'favicon.ico'));
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '재시작',
-      click: () => {
-        app.relaunch();
-        app.exit();
-      },
-    },
-    {
       label: '종료',
       click: () => {
         app.isQuiting = true;
