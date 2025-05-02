@@ -92,11 +92,6 @@ export function AlertsPage() {
   const loadAlerts = async () => {
     if (!isMonitoring) return; // 모니터링 중이 아니면 알림을 로드하지 않음
     try {
-      if (!window.electron) {
-        console.error('Electron API not available');
-        return;
-      }
-
       // 페이지네이션을 지원하는 새 IPC 메서드 호출
       const result = await window.electron.invoke('get-alerts');
 
@@ -131,11 +126,6 @@ export function AlertsPage() {
 
   // 이벤트 리스너 등록
   useEffect(() => {
-    if (!window.electron) {
-      console.error('Electron API not available');
-      return;
-    }
-
     // 새 알림 이벤트 리스너 등록 - 모니터링 중일 때만 자동 업데이트
     const newAlertsListener = window.electron.on('new-alerts-available', () => {
       if (isMonitoring) loadAlerts(); // 새로고침
@@ -149,11 +139,6 @@ export function AlertsPage() {
 
   // 요청 상세 보기
   const viewRequest = (srIdx: string) => {
-    if (!window.electron) {
-      toast.error('Electron API not available');
-      return;
-    }
-
     window.electron.invoke('open-request', srIdx);
   };
 
@@ -202,11 +187,11 @@ export function AlertsPage() {
                 <span className="text-muted-foreground">알림 표시:</span>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                  <span className="text-red-600 dark:text-red-400">긴급 요청</span>
+                  <span className="text-red-600 dark:text-red-400">긴급 요청 (제목에 "긴급" 포함)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                  <span className="text-amber-600 dark:text-amber-400">처리 지연</span>
+                  <span className="text-amber-600 dark:text-amber-400">처리 지연 (1주일 이상 소요)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 animate-ping" />

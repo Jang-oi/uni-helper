@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 
 import { useAppStore } from '@/store/app-store';
 
@@ -18,6 +21,7 @@ const formSchema = z.object({
   username: z.string().min(1, { message: '아이디를 입력해주세요' }),
   password: z.string().min(1, { message: '비밀번호를 입력해주세요' }),
   checkInterval: z.coerce.number().min(1, { message: '최소 1분 이상 설정해주세요' }).max(60, { message: '최대 60분까지 설정 가능합니다' }),
+  enableNotifications: z.boolean().default(true),
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -33,6 +37,7 @@ export function SettingsPage() {
       username: '',
       password: '',
       checkInterval: 5,
+      enableNotifications: true,
     },
   });
 
@@ -66,19 +71,15 @@ export function SettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        if (!window.electron) {
-          console.error('Electron API not available');
-          return;
-        }
-
         const settings = await window.electron.invoke('get-settings');
         if (settings) {
           // 설정 적용
-          const { username, password, checkInterval } = settings;
+          const { username, password, checkInterval, enableNotifications } = settings;
           form.reset({
             username,
             password,
             checkInterval,
+            enableNotifications: enableNotifications !== false, // 기본값은 true
           });
         }
       } catch (error) {
@@ -91,11 +92,6 @@ export function SettingsPage() {
 
   async function onSubmit(values: SettingsFormValues) {
     try {
-      if (!window.electron) {
-        toast.error('Electron API not available');
-        return;
-      }
-
       // 설정 저장 단계
       setLoading(true, '설정을 저장하고 있습니다...');
       // 설정 저장이 완료될 때까지 기다림
@@ -186,6 +182,42 @@ export function SettingsPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="enableNotifications"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">알림 설정</FormLabel>
+                        <FormDescription>새로운 업무 요청이나 상태 변경 시 알림을 받을지 설정합니다.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          className="cursor-pointer"
+                          checked={field.value}
+                          onCheckedChange={async (checked) => {
+                            field.onChange(checked);
+                            try {
+                              // 현재 설정 가져오기
+                              const currentSettings = (await window.electron.invoke('get-settings')) || {};
+                              // 알림 설정만 업데이트
+                              const updatedSettings = {
+                                ...currentSettings,
+                                enableNotifications: checked,
+                              };
+                              // 설정 저장
+                              await window.electron.invoke('save-settings', updatedSettings);
+                              toast.success(checked ? '알림이 활성화되었습니다' : '알림이 비활성화되었습니다');
+                            } catch (error) {
+                              console.error('알림 설정 저장 실패:', error);
+                              toast.error('알림 설정 저장에 실패했습니다');
+                            }
+                          }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
                 <Alert className="mt-4">
                   <Clock className="h-4 w-4" />
                   <AlertTitle>업무 시간 모니터링</AlertTitle>
@@ -202,7 +234,7 @@ export function SettingsPage() {
                 </Alert>
                 <div className="flex justify-between pt-4">
                   <div className="space-x-2">
-                    <Button type="submit" variant={isMonitoring ? 'destructive' : 'default'} disabled={isLoading}>
+                    <Button type="submit" variant={isMonitoring ? 'destructive' : 'default'} disabled={isLoading || !isBusinessHours}>
                       {isMonitoring ? '모니터링 중지' : '모니터링 시작'}
                     </Button>
                   </div>

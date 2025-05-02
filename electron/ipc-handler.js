@@ -453,6 +453,13 @@ async function checkForNewRequests() {
  * @param {Array} alerts - 표시할 알림 목록
  */
 function displayNotifications(alerts) {
+  // 설정에서 알림 활성화 여부 확인
+  const settings = store.get('settings') || {};
+  const enableNotifications = settings.enableNotifications !== false; // 기본값은 true
+
+  // 알림이 비활성화되어 있으면 표시하지 않음
+  if (!enableNotifications) return;
+
   alerts.forEach((alert) => {
     const notification = new Notification({
       title: `${alert.CM_NAME}`,
