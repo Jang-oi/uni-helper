@@ -36,12 +36,6 @@ export function setMainWindow(window) {
 
 // 자동 업데이트 설정
 function setupAutoUpdater() {
-  // 개발 환경에서는 자동 업데이트 비활성화
-  if (process.env.NODE_ENV === 'development') {
-    console.log('개발 환경에서는 자동 업데이트가 비활성화됩니다.');
-    return;
-  }
-
   // 업데이트 로그 설정
   autoUpdater.logger = console;
   autoUpdater.autoDownload = false;
@@ -75,13 +69,28 @@ function setupAutoUpdater() {
 
 // 업데이트 상태 전송 함수
 function sendUpdateStatus(status, data = {}) {
-  if (mainWindow) {
-    mainWindow.webContents.send('update-status', { status, ...data });
-  }
+  if (mainWindow) mainWindow.webContents.send('update-status', { status, ...data });
 }
 
 // 외부 링크 열기
 const openUniPost = async (srIdx) => {
+  /*// 로그인용 브라우저 창 생성
+  const supportWindow = new BrowserWindow({
+    width: 1600,
+    height: 900,
+    icon: path.join(__dirname, 'favicon.ico'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+    autoHideMenuBar: true,
+    show: true,
+    resizable: false,
+    center: true,
+  });
+
+  await supportWindow.loadURL(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);*/
   await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
 };
 
@@ -207,7 +216,7 @@ async function performLogin(username, password) {
     return { success: false, message: error.toString() };
   } finally {
     if (!loginWindow.isDestroyed()) {
-      // loginWindow.close();
+      loginWindow.close();
     }
   }
 }
@@ -616,11 +625,25 @@ function getAppInfo() {
   };
 }
 
+// 현재 모니터링 상태 확인 함수
+function getMonitoringStatus() {
+  return {
+    isMonitoring,
+    monitoringPaused: store.get('monitoringPaused') || false,
+    lastChecked: store.get('lastChecked') || null,
+  };
+}
+
 // IPC 핸들러 등록
 export function registerIpcHandlers() {
   // 설정 관련 핸들러
   ipcMain.handle('get-settings', async () => {
     return store.get('settings');
+  });
+
+  // 모니터링 상태 확인 핸들러 추가
+  ipcMain.handle('get-monitoring-status', () => {
+    return getMonitoringStatus();
   });
 
   ipcMain.handle('save-settings', async (event, settings) => {

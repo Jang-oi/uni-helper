@@ -29,7 +29,7 @@ type SettingsFormValues = z.infer<typeof formSchema>;
 export function SettingsPage() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isBusinessHours, setIsBusinessHours] = useState(true);
-  const { setMonitoring, setLoading, isLoading, isMonitoring } = useAppStore();
+  const { setMonitoring, setLoading, isLoading, isMonitoring, syncMonitoringStatus } = useAppStore();
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(formSchema),
@@ -67,6 +67,11 @@ export function SettingsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // 컴포넌트 마운트 시 모니터링 상태 동기화
+  useEffect(() => {
+    syncMonitoringStatus();
+  }, [syncMonitoringStatus]);
+
   // Load saved settings on component mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -89,6 +94,17 @@ export function SettingsPage() {
 
     loadSettings();
   }, [form]);
+
+  // 모니터링 상태 변경 이벤트 리스너
+  useEffect(() => {
+    const unsubscribe = window.electron.on('monitoring-status-changed', (status) => {
+      setMonitoring(status.isMonitoring);
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [setMonitoring]);
 
   async function onSubmit(values: SettingsFormValues) {
     try {
@@ -234,7 +250,7 @@ export function SettingsPage() {
                 </Alert>
                 <div className="flex justify-between pt-4">
                   <div className="space-x-2">
-                    <Button type="submit" variant={isMonitoring ? 'destructive' : 'default'} disabled={isLoading || !isBusinessHours}>
+                    <Button type="submit" variant={isMonitoring ? 'destructive' : 'default'} disabled={isLoading}>
                       {isMonitoring ? '모니터링 중지' : '모니터링 시작'}
                     </Button>
                   </div>

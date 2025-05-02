@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 
 import { AboutPage } from '@/pages/about-page';
@@ -19,7 +17,7 @@ import { UniAlertDialog } from '@/components/uni-alert-dialog';
 import { useAppStore } from '@/store/app-store';
 
 export function App() {
-  const { isLoading, loadingMessage, setElectronAvailable } = useAppStore();
+  const { isLoading, loadingMessage, setElectronAvailable, syncMonitoringStatus } = useAppStore();
   const [showElectronError, setShowElectronError] = useState(false);
   const [checkCount, setCheckCount] = useState(0);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -43,6 +41,7 @@ export function App() {
     } else {
       setShowElectronError(false);
       setIsInitializing(false);
+      syncMonitoringStatus();
     }
 
     return isElectronAvailable;

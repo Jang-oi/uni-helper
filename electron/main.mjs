@@ -1,12 +1,13 @@
 import { app, BrowserWindow, Menu, Tray } from 'electron';
-import path from 'path';
-import { registerIpcHandlers, setMainWindow } from './ipc-handler.js';
-import { fileURLToPath } from 'url';
 import electronLocalShortcut from 'electron-localshortcut';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import { registerIpcHandlers, setMainWindow } from './ipc-handler.js';
 
 // ES 모듈에서는 __dirname이 없으므로 직접 생성
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow, tray;
 
@@ -20,13 +21,14 @@ async function createWindow() {
       nodeIntegration: true,
     },
     autoHideMenuBar: true,
-    show           : true,
-    resizable      : false,
-    center         : true,
+    show: true,
+    resizable: false,
+    center: true,
   });
+  Menu.setApplicationMenu(null); // 전역 메뉴 없앰
 
-  const indexPath = path.join(__dirname, '../build/index.html') // 패키징된 앱에서의 경로
-  if (process.env.NODE_ENV === "development") await mainWindow.loadURL("http://localhost:5173")
+  const indexPath = path.join(__dirname, '../build/index.html'); // 패키징된 앱에서의 경로
+  if (process.env.NODE_ENV === 'development') await mainWindow.loadURL('http://localhost:5173');
   else await mainWindow.loadFile(indexPath);
 
   electronLocalShortcut.register(mainWindow, 'F12', () => {
@@ -36,8 +38,8 @@ async function createWindow() {
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
-      event.preventDefault();  // 창 닫기 방지
-      mainWindow.hide();       // 대신 창 숨김
+      event.preventDefault(); // 창 닫기 방지
+      mainWindow.hide(); // 대신 창 숨김
     }
   });
 
