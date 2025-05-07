@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ArrowUpCircle, CheckCircle, RefreshCw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,7 +19,7 @@ interface AppInfo {
 }
 
 // 업데이트 상태 타입
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'progress' | 'downloaded' | 'error';
 
 // 업데이트 정보 타입
 interface UpdateInfo {
@@ -38,7 +38,10 @@ export function AboutPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo>({});
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
+  const [downloadComplete, setDownloadComplete] = useState(false);
   const { openConfirm } = useAlertDialogStore();
+  const downloadStartedRef = useRef(false);
+  const errorShownRef = useRef(false);
 
   // 앱 정보 로드
   useEffect(() => {
@@ -59,8 +62,35 @@ export function AboutPage() {
     const updateListener = window.electron.on('update-status', (data) => {
       const { status, ...info } = data;
 
+      console.log('Update status received:', status, info); // 디버깅용 로그 추가
+      console.log(info); // 추가 디버깅
+
+      // 상태 업데이트
+      if (status === 'error') {
+        // 오류 상태 처리
+        if (!errorShownRef.current) {
+          errorShownRef.current = true;
+          toast.error('업데이트 오류', {
+            description: info.error || '업데이트 중 오류가 발생했습니다.',
+          });
+        }
+
+        // 다운로드 다이얼로그가 열려있으면 닫기
+        if (isDownloadDialogOpen) {
+          setIsDownloadDialogOpen(false);
+          setDownloadComplete(false);
+        }
+
+        setUpdateStatus('error');
+        setUpdateInfo(info);
+        downloadStartedRef.current = false;
+        return;
+      }
+
+      // 일반 상태 업데이트
       setUpdateStatus(status);
       setUpdateInfo(info);
+      errorShownRef.current = false;
 
       // 업데이트 상태에 따른 처리
       switch (status) {
@@ -69,6 +99,7 @@ export function AboutPage() {
             description: '새로운 버전이 있는지 확인하고 있습니다.',
           });
           break;
+
         case 'available':
           // 업데이트 다운로드 확인 다이얼로그 표시
           openConfirm({
@@ -82,37 +113,39 @@ export function AboutPage() {
             },
           });
           break;
+
         case 'not-available':
           toast.success('최신 버전 사용 중', {
             description: '현재 최신 버전을 사용하고 있습니다.',
           });
           break;
-        case 'downloading':
-          // 다운로드 다이얼로그 표시
-          setIsDownloadDialogOpen(true);
-          break;
-        case 'downloaded':
-          // 다운로드 다이얼로그 닫기
-          setIsDownloadDialogOpen(false);
 
-          // 설치 확인 다이얼로그 표시
-          openConfirm({
-            title: '업데이트 설치',
-            description: `버전 ${info.version}이(가) 다운로드되었습니다. 지금 설치하시겠습니까?
-            \n설치를 위해 프로그램이 재시작됩니다.`,
-            confirmText: '지금 설치',
-            cancelText: '나중에',
-            onConfirm: () => {
-              installUpdate();
-            },
-          });
+        case 'downloading':
+          // 다운로드 다이얼로그 표시 (이미 열려있지 않은 경우에만)
+          if (!isDownloadDialogOpen) {
+            setIsDownloadDialogOpen(true);
+            setDownloadComplete(false);
+          }
           break;
-        case 'error':
-          toast.error('업데이트 오류', {
-            description: info.error || '업데이트 중 오류가 발생했습니다.',
-          });
-          // 다운로드 다이얼로그 닫기
-          setIsDownloadDialogOpen(false);
+
+        case 'progress':
+          // 진행 상태 업데이트만 처리
+          break;
+
+        case 'downloaded':
+          // 다운로드 완료 상태 설정
+          console.log('Y=>({...Y,...L,percent:100})');
+          setUpdateInfo((prevInfo) => ({
+            ...prevInfo,
+            ...info,
+            percent: 100, // 진행률을 100%로 강제 설정
+          }));
+
+          // 다운로드 완료 플래그 설정
+          setDownloadComplete(true);
+
+          // 다운로드 시작 플래그 초기화
+          downloadStartedRef.current = false;
           break;
       }
     });
@@ -121,7 +154,7 @@ export function AboutPage() {
     return () => {
       if (typeof updateListener === 'function') updateListener();
     };
-  }, [openConfirm]);
+  }, [openConfirm, isDownloadDialogOpen]);
 
   // 업데이트 확인 함수
   const checkForUpdates = async () => {
@@ -132,17 +165,31 @@ export function AboutPage() {
       console.error('업데이트 확인 중 오류:', error);
       setUpdateStatus('error');
       setUpdateInfo({ error: String(error) });
+      errorShownRef.current = false;
     }
   };
 
   // 업데이트 다운로드 함수
   const downloadUpdate = async () => {
     try {
+      // 이미 다운로드가 시작된 경우 중복 실행 방지
+      if (downloadStartedRef.current) return;
+
+      // 다이얼로그를 먼저 열고 다운로드 시작
+      setIsDownloadDialogOpen(true);
+      setDownloadComplete(false);
+      downloadStartedRef.current = true;
+      errorShownRef.current = false;
+
       await window.electron.invoke('download-update');
     } catch (error) {
       console.error('업데이트 다운로드 중 오류:', error);
       setUpdateStatus('error');
       setUpdateInfo({ error: String(error) });
+      setIsDownloadDialogOpen(false);
+      setDownloadComplete(false);
+      downloadStartedRef.current = false;
+      errorShownRef.current = false;
     }
   };
 
@@ -154,7 +201,44 @@ export function AboutPage() {
       console.error('업데이트 설치 중 오류:', error);
       setUpdateStatus('error');
       setUpdateInfo({ error: String(error) });
+      errorShownRef.current = false;
+
+      // 오류 메시지 표시
+      toast.error('업데이트 설치 오류', {
+        description: String(error) || '업데이트 설치 중 오류가 발생했습니다.',
+      });
     }
+  };
+
+  // 다운로드 완료 처리
+  const handleDownloadComplete = () => {
+    // 다운로드 완료 시 자동으로 닫지 않음 - 사용자가 확인 버튼을 누르면 닫힘
+    console.log('Download complete');
+  };
+
+  // 다운로드 다이얼로그 닫기
+  const handleCloseDownloadDialog = () => {
+    setIsDownloadDialogOpen(false);
+
+    // 다운로드가 완료된 상태에서 닫는 경우, 설치 확인 다이얼로그 표시
+    if (downloadComplete && updateInfo.version) {
+      // 약간의 지연 후 다이얼로그 표시 (UI 업데이트 충돌 방지)
+      setTimeout(() => {
+        openConfirm({
+          title: '업데이트 설치',
+          description: `버전 ${updateInfo.version}이(가) 다운로드되었습니다. 지금 설치하시겠습니까?
+          \n설치를 위해 프로그램이 재시작됩니다.`,
+          confirmText: '지금 설치',
+          cancelText: '나중에',
+          onConfirm: () => {
+            installUpdate();
+          },
+        });
+      }, 100);
+    }
+
+    // 상태 초기화
+    setDownloadComplete(false);
   };
 
   // 업데이트 상태에 따른 UI 렌더링
@@ -259,15 +343,14 @@ export function AboutPage() {
       {/* 다운로드 진행 다이얼로그 */}
       <UpdateDialog
         isOpen={isDownloadDialogOpen}
-        onClose={() => setIsDownloadDialogOpen(false)}
+        onClose={handleCloseDownloadDialog}
         version={updateInfo.version || ''}
         progress={updateInfo.percent || 0}
         downloadSpeed={updateInfo.bytesPerSecond || 0}
         transferred={updateInfo.transferred || 0}
         total={updateInfo.total || 0}
-        onComplete={() => {
-          // 다운로드 완료 시 자동으로 닫지 않음 - 사용자가 확인 버튼을 누르면 닫힘
-        }}
+        onComplete={handleDownloadComplete}
+        isComplete={downloadComplete}
       />
 
       {/* 프로그램 정보 카드 */}

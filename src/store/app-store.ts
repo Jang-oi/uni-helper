@@ -11,14 +11,14 @@ interface AppState {
   loadingMessage: string;
   // 업데이트 관련 상태
   updateStatus: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'confirm';
-  updateInfo: any | null;
+  updateInfo: any;
   downloadProgress: number;
   // 함수들
   setLoading: (isLoading: boolean, message?: string) => void;
   setMonitoring: (isMonitoring: boolean) => void;
   setElectronAvailable: (isAvailable: boolean) => void;
   setUpdateStatus: (status: AppState['updateStatus']) => void;
-  setUpdateInfo: (info: any | null) => void;
+  setUpdateInfo: (info: any) => void;
   setDownloadProgress: (progress: number) => void;
   syncMonitoringStatus: () => Promise<void>; // 새로운 함수 추가
 }
@@ -32,7 +32,7 @@ export const useAppStore = create<AppState>()(
       isElectronAvailable: false,
       // 업데이트 관련 상태 초기값
       updateStatus: 'idle',
-      updateInfo: null,
+      updateInfo: {},
       downloadProgress: 0,
       // 기존 함수들
       setLoading: (isLoading, message = '') => set({ isLoading, loadingMessage: message }),
@@ -56,7 +56,7 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'app-storage',
+      name: 'state-storage',
       partialize: (state) => ({
         // 영구 저장할 상태만 선택
         isMonitoring: state.isMonitoring,

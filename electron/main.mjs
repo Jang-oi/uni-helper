@@ -28,8 +28,12 @@ async function createWindow() {
   Menu.setApplicationMenu(null); // 전역 메뉴 없앰
 
   const indexPath = path.join(__dirname, '../build/index.html'); // 패키징된 앱에서의 경로
-  if (process.env.NODE_ENV === 'development') await mainWindow.loadURL('http://localhost:5173');
-  else await mainWindow.loadFile(indexPath);
+  if (process.env.NODE_ENV === 'development') {
+    await mainWindow.loadURL('http://localhost:5173');
+    electronLocalShortcut.register(mainWindow, 'F5', () => {
+      mainWindow.reload();
+    });
+  } else await mainWindow.loadFile(indexPath);
 
   electronLocalShortcut.register(mainWindow, 'F12', () => {
     mainWindow.webContents.openDevTools({ mode: 'detach' });

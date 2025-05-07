@@ -6,7 +6,7 @@ import { Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 
 interface UpdateDialogProps {
@@ -18,18 +18,37 @@ interface UpdateDialogProps {
   transferred: number;
   total: number;
   onComplete: () => void;
+  isComplete?: boolean;
 }
 
-export function UpdateDialog({ isOpen, onClose, version, progress, downloadSpeed, transferred, total, onComplete }: UpdateDialogProps) {
-  const [isComplete, setIsComplete] = useState(false);
+export function UpdateDialog({
+  isOpen,
+  onClose,
+  version,
+  progress,
+  downloadSpeed,
+  transferred,
+  total,
+  onComplete,
+  isComplete = false,
+}: UpdateDialogProps) {
+  const [displayProgress, setDisplayProgress] = useState(0);
 
-  // 다운로드 완료 감지
+  // 진행률 업데이트
   useEffect(() => {
-    if (progress >= 100) {
-      setIsComplete(true);
+    if (isComplete) {
+      setDisplayProgress(100);
+    } else if (total > 0) {
+      setDisplayProgress((transferred / total) * 100);
+    }
+  }, [progress, total, transferred, isComplete]);
+
+  // 완료 상태 변경 시 콜백 호출
+  useEffect(() => {
+    if (isComplete) {
       onComplete();
     }
-  }, [progress, onComplete]);
+  }, [isComplete, onComplete]);
 
   // 다운로드 속도 및 진행률 포맷팅 함수
   const formatDownloadSpeed = (bytesPerSecond: number) => {
@@ -53,8 +72,10 @@ export function UpdateDialog({ isOpen, onClose, version, progress, downloadSpeed
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} modal={true}>
       <DialogContent className="sm:max-w-[425px] hideCloseButton">
+        <DialogTitle>업데이트 다운로드</DialogTitle>
+        <DialogDescription className="sr-only">업데이트 다운로드 진행 상황</DialogDescription>
         <Card className="border-none shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
@@ -73,9 +94,9 @@ export function UpdateDialog({ isOpen, onClose, version, progress, downloadSpeed
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>{isComplete ? '완료' : '다운로드 중...'}</span>
-                  <span>{Math.round(progress)}%</span>
+                  <span>{Math.round(isComplete ? 100 : displayProgress)}%</span>
                 </div>
-                <Progress value={progress} className="h-2" />
+                <Progress value={displayProgress} className="h-2" />
                 {!isComplete && (
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{formatDownloadSpeed(downloadSpeed)}</span>
