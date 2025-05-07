@@ -496,9 +496,9 @@ async function checkForNewRequests() {
       return existingAlert && existingAlert.STATUS !== newAlert.STATUS && newAlert.STATUS === '고객사답변';
     });
 
+    const alertsWithFlags = formattedAllRequests.map((alert) => addStatusFlags(alert));
     // 알림 정렬 후 저장 (우선순위에 따라 정렬)
-    const sortedAlerts = sortAlerts(formattedAllRequests);
-    store.set('alerts', sortedAlerts);
+    store.set('alerts', alertsWithFlags);
     store.set('personalRequests', formattedPersonalRequests);
 
     // 메인 윈도우에 알림 이벤트 전송
