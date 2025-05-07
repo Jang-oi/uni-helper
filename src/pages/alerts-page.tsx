@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 
-import { Bell, Clock, ExternalLink, User } from 'lucide-react';
+import { Bell, Clock, ExternalLink, SortAsc, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,6 +37,21 @@ interface AlertItem {
   isDelayed: boolean;
   isPending: boolean;
 }
+
+// 정렬 옵션 타입
+type SortOption = 'default' | 'customerResponse' | 'inProgress' | 'urgent' | 'delayed' | 'pending' | 'dateAsc' | 'dateDesc';
+
+// 정렬 옵션 레이블
+const sortOptionLabels: Record<SortOption, string> = {
+  default: '기본 정렬',
+  customerResponse: '고객사답변 우선',
+  inProgress: '처리중 우선',
+  urgent: '긴급 요청 우선',
+  delayed: '처리 지연 우선',
+  pending: '접수 후 1시간 미처리 우선',
+  dateAsc: '요청일시 (오래된순)',
+  dateDesc: '요청일시 (최신순)',
+};
 
 // 상태에 따른 배지 스타일 결정
 function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -87,6 +111,8 @@ export function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [personalRequests, setPersonalRequests] = useState<AlertItem[]>([]);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [sortOption, setSortOption] = useState<SortOption>('default');
+  const [personalSortOption, setPersonalSortOption] = useState<SortOption>('default');
   const { isMonitoring } = useAppStore();
 
   // 알림 목록 불러오기
@@ -123,6 +149,71 @@ export function AlertsPage() {
     return { isTruncated: true, displayText: text.slice(0, maxLength) + '...' };
   }
 
+  // 알림 정렬 함수
+  const sortAlerts = (items: AlertItem[], option: SortOption): AlertItem[] => {
+    if (!items || items.length === 0) return [];
+
+    const sortedItems = [...items];
+
+    switch (option) {
+      case 'customerResponse':
+        return sortedItems.sort((a, b) => {
+          // 고객사답변 우선
+          if (a.STATUS === '고객사답변' && b.STATUS !== '고객사답변') return -1;
+          if (a.STATUS !== '고객사답변' && b.STATUS === '고객사답변') return 1;
+          // 그 다음은 날짜순
+          return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+        });
+
+      case 'inProgress':
+        return sortedItems.sort((a, b) => {
+          // 처리중 우선
+          if (a.STATUS === '처리중' && b.STATUS !== '처리중') return -1;
+          if (a.STATUS !== '처리중' && b.STATUS === '처리중') return 1;
+          // 그 다음은 날짜순
+          return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+        });
+
+      case 'urgent':
+        return sortedItems.sort((a, b) => {
+          // 긴급 요청 우선
+          if (a.isUrgent && !b.isUrgent) return -1;
+          if (!a.isUrgent && b.isUrgent) return 1;
+          // 그 다음은 날짜순
+          return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+        });
+
+      case 'delayed':
+        return sortedItems.sort((a, b) => {
+          // 처리 지연 우선
+          if (a.isDelayed && !b.isDelayed) return -1;
+          if (!a.isDelayed && b.isDelayed) return 1;
+          // 그 다음은 날짜순
+          return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+        });
+
+      case 'pending':
+        return sortedItems.sort((a, b) => {
+          // 접수 후 1시간 미처리 우선
+          if (a.isPending && !b.isPending) return -1;
+          if (!a.isPending && b.isPending) return 1;
+          // 그 다음은 날짜순
+          return new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime();
+        });
+
+      case 'dateAsc':
+        return sortedItems.sort((a, b) => new Date(a.REQ_DATE_ALL).getTime() - new Date(b.REQ_DATE_ALL).getTime());
+
+      case 'dateDesc':
+        return sortedItems.sort((a, b) => new Date(b.REQ_DATE_ALL).getTime() - new Date(a.REQ_DATE_ALL).getTime());
+
+      case 'default':
+      default:
+        // 기본 정렬: 서버에서 받은 순서 (이미 우선순위가 적용되어 있음)
+        return sortedItems;
+    }
+  };
+
   // 모니터링 상태 변경 시 알림 목록 로드
   useEffect(() => {
     // 새 알림 이벤트 리스너 등록
@@ -140,6 +231,10 @@ export function AlertsPage() {
   useEffect(() => {
     if (isMonitoring) loadAlerts();
   }, [isMonitoring]);
+
+  // 정렬된 알림 목록 가져오기
+  const getSortedAlerts = () => sortAlerts(alerts, sortOption);
+  const getSortedPersonalRequests = () => sortAlerts(personalRequests, personalSortOption);
 
   // 테이블 렌더링 함수
   const renderTable = (items: AlertItem[]) => {
@@ -234,6 +329,38 @@ export function AlertsPage() {
     );
   };
 
+  // 정렬 드롭다운 메뉴 렌더링 함수
+  const renderSortDropdown = (currentOption: SortOption, setOption: (option: SortOption) => void) => {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1 h-8">
+            <SortAsc className="h-3.5 w-3.5" />
+            <span className="text-xs">{sortOptionLabels[currentOption]}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56">
+          <DropdownMenuLabel>정렬 기준</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup value={currentOption} onValueChange={(value) => setOption(value as SortOption)}>
+            <DropdownMenuRadioItem value="default">기본 정렬</DropdownMenuRadioItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">상태별 정렬</DropdownMenuLabel>
+            <DropdownMenuRadioItem value="customerResponse">고객사답변 우선</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="inProgress">처리중 우선</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="urgent">긴급 요청 우선</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="delayed">처리 지연 우선</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="pending">접수 후 1시간 미처리 우선</DropdownMenuRadioItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">날짜별 정렬</DropdownMenuLabel>
+            <DropdownMenuRadioItem value="dateDesc">요청일시 (최신순)</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dateAsc">요청일시 (오래된순)</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
   return (
     <div className="container">
       {isMonitoring && (
@@ -285,10 +412,11 @@ export function AlertsPage() {
                   <CardTitle>전체 알림 내역</CardTitle>
                   <CardDescription>모든 접수 건을 우선순위에 따라 표시합니다</CardDescription>
                 </div>
+                {renderSortDropdown(sortOption, setSortOption)}
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(alerts)}</ScrollArea>
+              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(getSortedAlerts())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -301,10 +429,11 @@ export function AlertsPage() {
                   <CardTitle>내 처리 건</CardTitle>
                   <CardDescription>현재 사용자가 처리 중인 접수 건을 표시합니다</CardDescription>
                 </div>
+                {renderSortDropdown(personalSortOption, setPersonalSortOption)}
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(personalRequests)}</ScrollArea>
+              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(getSortedPersonalRequests())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>

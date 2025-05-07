@@ -1,15 +1,7 @@
 import { Bell, Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 
 export function AppSidebar() {
   const location = useLocation();
@@ -48,9 +40,6 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter className="p-4 text-xs text-muted-foreground">
-        <div>업무 모니터링 시스템 v1.0.0</div>
-      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -23,9 +23,6 @@ let isMonitoring = false;
 let monitoringInterval = null;
 let isLoggedIn = false;
 
-// 개발 환경에서 사용할 시뮬레이션 변수
-let simulatedVersion = null;
-
 // 메인 윈도우 설정 함수
 export function setMainWindow(window) {
   mainWindow = window;
@@ -640,15 +637,6 @@ function getAlerts() {
   }
 }
 
-// 앱 버전 정보 가져오기
-function getAppInfo() {
-  return {
-    version: simulatedVersion || app.getVersion(),
-    name: app.getName(),
-    isDevMode: process.env.NODE_ENV === 'development',
-  };
-}
-
 // 현재 모니터링 상태 확인 함수
 function getMonitoringStatus() {
   return {
@@ -701,7 +689,7 @@ export function registerIpcHandlers() {
 
   // 앱 정보 핸들러
   ipcMain.handle('get-app-info', () => {
-    return getAppInfo();
+    return { version: app.getVersion() };
   });
 
   // 업데이트 관련 핸들러
