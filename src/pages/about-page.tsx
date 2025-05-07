@@ -45,9 +45,6 @@ export function AboutPage() {
       const { status, ...rest } = data;
 
       switch (status) {
-        case 'checking':
-          setUpdateStatus('checking');
-          break;
         case 'available':
           // 자동 다운로드 대신 확인 상태로 변경
           setUpdateStatus('confirm');
@@ -134,13 +131,6 @@ export function AboutPage() {
           <Button variant="outline" onClick={checkForUpdates} className="w-full">
             <Download className="h-4 w-4 mr-2" />
             업데이트 확인
-          </Button>
-        );
-      case 'checking':
-        return (
-          <Button variant="outline" disabled className="w-full">
-            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            업데이트 확인 중...
           </Button>
         );
       case 'confirm':

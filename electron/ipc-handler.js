@@ -267,13 +267,14 @@ async function scrapeDataFromSite() {
   // 업무 시간 체크
   if (!isBusinessHours()) {
     console.log('업무 시간이 아니므로 스크래핑 건너뜀');
-    return { success: false, message: '업무 시간이 아닙니다', data: [] };
+    isLoggedIn = false;
+    return { success: false, message: '업무 시간이 아닙니다', allRequests: [], personalRequests: [] };
   }
 
   const { success, message } = await ensureLoggedIn();
   if (!success) {
     console.error('데이터 스크래핑을 위한 로그인 실패');
-    return { success: false, message: message, data: [] };
+    return { success: false, message: message, allRequests: [], personalRequests: [] };
   }
 
   dataWindow = new BrowserWindow({
@@ -334,9 +335,18 @@ async function scrapeDataFromSite() {
           await waitForLoadingToFinish(iframe.contentDocument);
     
           const grid = iframe.contentWindow.grid;
-          const gridData = grid.getAllRowValue();
+          const allRequestsData = grid.getAllRowValue();
+          
+          // Second search: Get current user's requests
+          const currentUsername = document.querySelector('.userNm').textContent.trim();
+          iframe.contentWindow.UNIUX.SVC('RECEIPT_INFO_SEARCH_TYPE', 'P');
+          iframe.contentWindow.UNIUX.SVC('RECEIPT_INFO_TEXT', currentUsername);
     
-          return { success: true, data: gridData };
+          iframe.contentDocument.querySelector('#doSearch').click();
+          await waitForLoadingToFinish(iframe.contentDocument);
+          const personalRequestsData = grid.getAllRowValue();
+          
+           return { success: true, allRequestsData, personalRequestsData };
         } catch (error) {
           return { success: false, message: "데이터 스크래핑 오류: " + error.message };
         }
@@ -344,14 +354,14 @@ async function scrapeDataFromSite() {
     `);
 
     if (result.success) {
-      return { success: true, data: result.data };
+      return { success: true, allRequests: result.allRequestsData, personalRequests: result.personalRequestsData };
     } else {
       console.error('데이터 스크래핑 실패:', result.message);
-      return { success: false, message: result.message, data: [] };
+      return { success: false, message: result.message, allRequests: [], personalRequests: [] };
     }
   } catch (error) {
     console.error('데이터 스크래핑 중 오류:', error);
-    return { success: false, message: error.toString(), data: [] };
+    return { success: false, message: error.toString(), allRequests: [], personalRequests: [] };
   } finally {
     if (!dataWindow.isDestroyed()) {
       dataWindow.close();
@@ -463,30 +473,23 @@ async function checkForNewRequests() {
 
     if (!result.success) return { success: false, message: result.message };
 
-    const data = result.data;
-    if (!data || data.length === 0) return { success: true, message: '새로운 데이터가 없습니다' };
-
+    const { allRequests, personalRequests } = result;
+    if (!allRequests || allRequests.length === 0) return { success: true, message: '새로운 데이터가 없습니다' };
     // 기존 알림 불러오기
     const existingAlerts = store.get('alerts') || [];
-
-    // 항목 필터링하여 업데이트된 알림 리스트 만들기
-    const updatedAlerts = data.map((item) => ({
-      SR_IDX: item['SR_IDX'],
-      REQ_TITLE: item['REQ_TITLE'],
-      CM_NAME: item['CM_NAME'],
-      STATUS: item['STATUS'],
-      WRITER: item['WRITER'],
-      REQ_DATE: item['REQ_DATE'],
-      REQ_DATE_ALL: item['REQ_DATE_ALL'],
-      PROCESS_DATE: item['PROCESS_DATE'],
-    }));
+    // 모든 요청 데이터 형식화
+    const formattedAllRequests = allRequests.map(formatRequestData);
+    // 사용자 개인 요청 데이터 형식화
+    const formattedPersonalRequests = personalRequests.map(formatRequestData);
 
     // 새 알림만 필터링
     // 새 알림 찾기 - 기존 알림에 없는 SR_IDX를 가진 항목들
-    const newAlerts = updatedAlerts.filter((newAlert) => !existingAlerts.some((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX));
+    const newAlerts = formattedAllRequests.filter(
+      (newAlert) => !existingAlerts.some((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX),
+    );
 
     // 상태가 변경된 알림 찾기 (특히 고객사답변으로 변경된 경우)
-    const statusChangedAlerts = updatedAlerts.filter((newAlert) => {
+    const statusChangedAlerts = formattedAllRequests.filter((newAlert) => {
       const existingAlert = existingAlerts.find((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX);
 
       // 기존 알림이 있고, 상태가 변경되었으며, 새 상태가 '고객사답변'인 경우
@@ -494,8 +497,9 @@ async function checkForNewRequests() {
     });
 
     // 알림 정렬 후 저장 (우선순위에 따라 정렬)
-    const sortedAlerts = sortAlerts(updatedAlerts);
+    const sortedAlerts = sortAlerts(formattedAllRequests);
     store.set('alerts', sortedAlerts);
+    store.set('personalRequests', formattedPersonalRequests);
 
     // 메인 윈도우에 알림 이벤트 전송
     if (mainWindow) mainWindow.webContents.send('new-alerts-available');
@@ -506,13 +510,32 @@ async function checkForNewRequests() {
     if (statusChangedAlerts.length > 0) displayNotifications(statusChangedAlerts);
     return {
       success: true,
-      message: `${updatedAlerts.length}개 항목 업데이트 (${newAlerts.length}개 신규, ${statusChangedAlerts.length}개 고객사답변 상태 변경)`,
+      message: `${formattedAllRequests.length}개 항목 업데이트 (${newAlerts.length}개 신규, ${statusChangedAlerts.length}개 고객사답변 상태 변경)`,
     };
   } catch (error) {
     console.error('모니터링 중 오류:', error);
     return { success: false, error: error.toString() };
   }
 }
+
+/**
+ * 요청 데이터 형식화 함수
+ * @param {Object} item - 원본 요청 항목
+ * @returns {Object} - 형식화된 요청 항목
+ */
+function formatRequestData(item) {
+  return {
+    SR_IDX: item['SR_IDX'],
+    REQ_TITLE: item['REQ_TITLE'],
+    CM_NAME: item['CM_NAME'],
+    STATUS: item['STATUS'],
+    WRITER: item['WRITER'],
+    REQ_DATE: item['REQ_DATE'],
+    REQ_DATE_ALL: item['REQ_DATE_ALL'],
+    PROCESS_DATE: item['PROCESS_DATE'],
+  };
+}
+
 /**
  * 시스템 알림을 표시하는 함수
  * @param {Array} alerts - 표시할 알림 목록
@@ -606,10 +629,11 @@ function getAlerts() {
   try {
     // 저장된 모든 알림 가져오기
     const allAlerts = store.get('alerts') || [];
+    const personalRequests = store.get('personalRequests') || [];
     // 마지막 확인 시간
     const lastChecked = store.get('lastChecked') || null;
 
-    return { success: true, alerts: allAlerts, lastChecked };
+    return { success: true, alerts: allAlerts, personalRequests, lastChecked };
   } catch (error) {
     console.error('알림 목록 조회 중 오류:', error);
     return { success: false, error: error.toString() };

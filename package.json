@@ -75,6 +75,9 @@
     "vite": "6.3.4",
     "wait-on": "^8.0.3"
   },
+  "author": {
+    "name": "Unipost"
+  },
   "build": {
     "appId": "com.unipost.helper.app",
     "productName": "uni-helper-app",
@@ -107,9 +110,6 @@
     },
     "publish": {
       "provider": "github"
-    },
-    "author": {
-      "name": "Unipost"
     }
   }
 }
