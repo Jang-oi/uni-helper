@@ -299,7 +299,7 @@ export function AlertsPage() {
                     </TooltipProvider>
                   </TableCell>
                   <TableCell className="py-1 px-2">
-                    <Badge variant={getStatusVariant(item.STATUS)} className="text-[10px] px-1 py-0 h-5">
+                    <Badge variant={getStatusVariant(item.STATUS)} className="text-[10px] px-1 py-0 h-5 w-14">
                       {item.STATUS}
                     </Badge>
                   </TableCell>
