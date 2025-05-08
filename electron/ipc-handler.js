@@ -494,9 +494,11 @@ async function checkForNewRequests() {
     });
 
     const alertsWithFlags = formattedAllRequests.map((alert) => addStatusFlags(alert));
+    const personalRequestsWithFlags = personalRequests.map((alert) => addStatusFlags(alert));
+
     // 알림 정렬 후 저장 (우선순위에 따라 정렬)
     store.set('alerts', alertsWithFlags);
-    store.set('personalRequests', formattedPersonalRequests);
+    store.set('personalRequests', personalRequestsWithFlags);
 
     // 메인 윈도우에 알림 이벤트 전송
     if (mainWindow) mainWindow.webContents.send('new-alerts-available');

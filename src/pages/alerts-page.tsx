@@ -416,7 +416,7 @@ export function AlertsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(getSortedAlerts())}</ScrollArea>
+              <ScrollArea className="h-[calc(91vh-300px)]">{renderTable(getSortedAlerts())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -433,7 +433,7 @@ export function AlertsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(80vh-300px)]">{renderTable(getSortedPersonalRequests())}</ScrollArea>
+              <ScrollArea className="h-[calc(91vh-300px)]">{renderTable(getSortedPersonalRequests())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
