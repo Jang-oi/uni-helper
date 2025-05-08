@@ -22,6 +22,8 @@ let mainWindow, dataWindow;
 let isMonitoring = false;
 let monitoringInterval = null;
 let isLoggedIn = false;
+// 알림 객체를 전역으로 저장할 배열 (가비지 컬렉션 방지)
+const activeNotifications = [];
 
 // 메인 윈도우 설정 함수
 export function setMainWindow(window) {
@@ -547,19 +549,58 @@ function displayNotifications(alerts) {
   // 알림이 비활성화되어 있으면 표시하지 않음
   if (!enableNotifications) return;
 
+  // 오래된 알림 참조 정리 (2분 이상 지난 알림)
+  const now = Date.now();
+  const twoMinutesInMs = 2 * 60 * 1000;
+
+  // 오래된 알림 필터링하여 제거
+  while (activeNotifications.length > 0 && now - activeNotifications[0].createdAt > twoMinutesInMs) {
+    activeNotifications.shift();
+  }
+
   alerts.forEach((alert) => {
     const notification = new Notification({
       title: `${alert.CM_NAME}`,
       body: `${alert.REQ_TITLE}\n상태: ${alert.STATUS}\n`,
       icon: path.join(__dirname, 'favicon.ico'),
     });
+    // 생성 시간과 참조하는 SR_IDX 저장
+    const notificationObj = {
+      notification: notification,
+      srIdx: alert.SR_IDX,
+      createdAt: Date.now(),
+    };
 
     notification.on('click', async () => {
       await openUniPost(alert.SR_IDX);
     });
-
+    // 알림 표시
     notification.show();
+
+    // 활성 알림 배열에 추가
+    activeNotifications.push(notificationObj);
   });
+
+  // 알림 객체 정리를 위한 타이머 설정 (30초 후)
+  setTimeout(() => {
+    // 현재 시간 기준으로 활성 상태인 알림 확인
+    const currentTime = Date.now();
+
+    // 활성 알림 배열에서 제거할 항목 인덱스 찾기
+    const removeIndices = [];
+    activeNotifications.forEach((item, index) => {
+      // 30초 이상 지났거나 이미 파괴된 알림 객체 식별
+      const isExpired = currentTime - item.createdAt > 30000;
+      const isDestroyed = item.notification && item.notification.isDestroyed && item.notification.isDestroyed();
+
+      if (isExpired || isDestroyed) removeIndices.unshift(index); // 역순으로 인덱스 추가 (제거 시 인덱스 변화 방지)
+    });
+
+    // 식별된 항목 제거
+    removeIndices.forEach((index) => {
+      activeNotifications.splice(index, 1);
+    });
+  }, 30000);
 }
 // 모니터링 시작 함수
 async function startMonitoring() {
