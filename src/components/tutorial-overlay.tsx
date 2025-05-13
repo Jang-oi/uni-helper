@@ -86,7 +86,7 @@ export function TutorialOverlay() {
 
         switch (currentStepData.position) {
           case 'top':
-            cardTop = rect.top - 200;
+            cardTop = rect.top - 250;
             cardLeft = rect.left + rect.width / 2 - 150;
             break;
           case 'right':
