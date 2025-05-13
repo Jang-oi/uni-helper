@@ -23,7 +23,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={currentPath === '/alerts'}>
+            <SidebarMenuButton asChild isActive={currentPath === '/alerts'} data-tutorial="alerts-nav">
               <Link to="/alerts">
                 <Bell className="h-5 w-5" />
                 <span>알림</span>
@@ -31,7 +31,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={currentPath === '/about'}>
+            <SidebarMenuButton asChild isActive={currentPath === '/about'} data-tutorial="about-nav">
               <Link to="/about">
                 <Info className="h-5 w-5" />
                 <span>프로그램 정보</span>

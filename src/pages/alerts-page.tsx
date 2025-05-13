@@ -362,7 +362,7 @@ export function AlertsPage() {
   };
 
   return (
-    <div className="container">
+    <div className="container" data-tutorial="alerts-page">
       {isMonitoring && (
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
@@ -387,7 +387,7 @@ export function AlertsPage() {
         </div>
       )}
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs defaultValue="all" className="w-full" data-tutorial="alerts-tabs">
         <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="all" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />

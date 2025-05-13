@@ -1,7 +1,10 @@
+'use client';
+
 import { MoonIcon, SunIcon } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 import { useTheme } from '@/components/theme-provider';
+import { TutorialButton } from '@/components/tutorial-button.tsx';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -31,15 +34,12 @@ export function SiteHeader() {
         <SidebarTrigger className="-ml-1" />
         <h1 className="text-lg font-semibold">{getPageTitle()}</h1>
         <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
-        <Button
-          className="ml-auto"
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <TutorialButton />
+          <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
+            {theme === 'dark' ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+          </Button>
+        </div>
       </div>
     </header>
   );

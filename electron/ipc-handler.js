@@ -689,11 +689,40 @@ function getMonitoringStatus() {
   };
 }
 
+// 시작 프로그램 설정 함수
+function setStartupProgram(enable) {
+  try {
+    app.setLoginItemSettings({ openAtLogin: enable });
+
+    return { success: true, message: enable ? '시작 프로그램에 등록되었습니다.' : '시작 프로그램에서 제거되었습니다.' };
+  } catch (error) {
+    console.error('시작 프로그램 설정 중 오류:', error);
+    return { success: false, message: error.toString() };
+  }
+}
+
+// 현재 시작 프로그램 설정 상태 확인
+function getStartupStatus() {
+  try {
+    const status = app.getLoginItemSettings();
+    return { success: true, openAtLogin: status.openAtLogin };
+  } catch (error) {
+    console.error('시작 프로그램 상태 확인 중 오류:', error);
+    return { success: false, message: error.toString() };
+  }
+}
+
 // IPC 핸들러 등록
 export function registerIpcHandlers() {
   // 설정 관련 핸들러
   ipcMain.handle('get-settings', async () => {
-    return store.get('settings');
+    const settings = store.get('settings') || {};
+    // 시작 프로그램 상태 확인 및 추가
+    const startupStatus = getStartupStatus();
+    if (startupStatus.success) {
+      settings.startAtLogin = startupStatus.openAtLogin;
+    }
+    return settings;
   });
 
   // 모니터링 상태 확인 핸들러 추가
@@ -703,6 +732,9 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('save-settings', async (event, settings) => {
     try {
+      // 시작 프로그램 설정 적용
+      if (settings.hasOwnProperty('startAtLogin')) setStartupProgram(settings.startAtLogin);
+
       store.set('settings', settings);
       return { success: true };
     } catch (error) {

@@ -339,7 +339,7 @@ export function AboutPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6" data-tutorial="about-page">
       {/* 다운로드 진행 다이얼로그 */}
       <UpdateDialog
         isOpen={isDownloadDialogOpen}
