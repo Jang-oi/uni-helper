@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Bell, Clock, ExternalLink, SortAsc, User } from 'lucide-react';
 import { toast } from 'sonner';
@@ -114,6 +114,10 @@ export function AlertsPage() {
   const [sortOption, setSortOption] = useState<SortOption>('default');
   const [personalSortOption, setPersonalSortOption] = useState<SortOption>('default');
   const { isMonitoring } = useAppStore();
+
+  const [activeTab, setActiveTab] = useState('all');
+  // 탭 참조 생성
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   // 알림 목록 불러오기
   const loadAlerts = async () => {
@@ -231,6 +235,22 @@ export function AlertsPage() {
   useEffect(() => {
     if (isMonitoring) loadAlerts();
   }, [isMonitoring]);
+
+  // 탭 변경 함수 - 튜토리얼에서 사용
+  const changeTab = useCallback((tabValue: string) => {
+    setActiveTab(tabValue);
+  }, []);
+
+  // 튜토리얼에서 탭 변경을 위한 전역 함수 등록
+  useEffect(() => {
+    // @ts-ignore - 전역 객체에 함수 추가
+    window.__changeSettingsTab = changeTab;
+
+    return () => {
+      // @ts-ignore - 컴포넌트 언마운트 시 제거
+      delete window.__changeSettingsTab;
+    };
+  }, [changeTab]);
 
   // 정렬된 알림 목록 가져오기
   const getSortedAlerts = () => sortAlerts(alerts, sortOption);
@@ -362,33 +382,37 @@ export function AlertsPage() {
   };
 
   return (
-    <div className="container" data-tutorial="alerts-page">
+    <div className="max-w-4xl mx-auto space-y-6" data-tutorial="alerts-page">
       {isMonitoring && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            {lastChecked ? `마지막 확인: ${lastChecked}` : '알림을 확인하는 중입니다...'}
+        <div className="bg-muted/30 p-4 rounded-lg mb-1">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-medium">알림 상태</h3>
+              <p className="text-sm text-muted-foreground">{lastChecked ? `마지막 확인: ${lastChecked}` : '알림을 확인하는 중입니다...'}</p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="text-muted-foreground">알림 표시:</span>
-            <div className="flex items-center gap-2">
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30">
               <span className="inline-flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
-              <span className="text-red-600 dark:text-red-400">긴급 요청 (제목에 "긴급" 포함)</span>
+              <span className="text-sm text-red-600 dark:text-red-400">긴급 요청</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
               <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-              <span className="text-amber-600 dark:text-amber-400">처리 지연 (1주일 이상 소요)</span>
+              <span className="text-sm text-amber-600 dark:text-amber-400">처리 지연</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
               <span className="inline-flex h-2 w-2 rounded-full bg-blue-500 animate-ping" />
-              <span className="text-blue-600 dark:text-blue-400">접수 후 1시간 이상 미처리</span>
+              <span className="text-sm text-blue-600 dark:text-blue-400">1시간 미처리</span>
             </div>
           </div>
         </div>
       )}
-
-      <Tabs defaultValue="all" className="w-full" data-tutorial="alerts-tabs">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tutorial="alerts-tabs" ref={tabsRef}>
+        <TabsList className="grid w-full grid-cols-2 mb-1">
           <TabsTrigger value="all" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
             전체 알림
@@ -406,7 +430,7 @@ export function AlertsPage() {
 
         <TabsContent value="all" className="mt-0">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>전체 알림 내역</CardTitle>
@@ -416,14 +440,14 @@ export function AlertsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(91vh-300px)]">{renderTable(getSortedAlerts())}</ScrollArea>
+              <ScrollArea className="h-[calc(84vh-300px)]">{renderTable(getSortedAlerts())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="personal" className="mt-0">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>내 처리 건</CardTitle>
@@ -433,7 +457,7 @@ export function AlertsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[calc(91vh-300px)]">{renderTable(getSortedPersonalRequests())}</ScrollArea>
+              <ScrollArea className="h-[calc(84vh-300px)]">{renderTable(getSortedPersonalRequests())}</ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>

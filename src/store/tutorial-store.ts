@@ -11,6 +11,7 @@ export type TutorialStep = {
   spotlightRadius?: number; // 스포트라이트 원의 반지름 (픽셀)
   spotlightShape?: 'circle' | 'rectangle'; // 스포트라이트 모양 (기본값: circle)
   spotlightPadding?: number; // 요소 주변 여백 (픽셀, 사각형 모드에서 사용)
+  tabValue?: string; // 선택해야 할 탭 값
 };
 
 // 튜토리얼 스토어 상태 타입
@@ -40,6 +41,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 300,
     spotlightShape: 'rectangle',
     spotlightPadding: 20,
+    tabValue: 'account',
   },
   {
     id: 2,
@@ -51,6 +53,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 10,
+    tabValue: 'account',
   },
   {
     id: 3,
@@ -62,6 +65,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 10,
+    tabValue: 'account',
   },
   {
     id: 4,
@@ -73,6 +77,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 10,
+    tabValue: 'account',
   },
   {
     id: 5,
@@ -84,6 +89,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 15,
+    tabValue: 'notifications',
   },
   {
     id: 6,
@@ -95,6 +101,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 15,
+    tabValue: 'system',
   },
   {
     id: 7,
@@ -102,10 +109,11 @@ const tutorialSteps: TutorialStep[] = [
     title: '모니터링 시작/중지',
     page: 'settings',
     description: '이 버튼을 클릭하여 모니터링을 시작하거나 중지할 수 있습니다.',
-    position: 'top',
+    position: 'left',
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
-    spotlightPadding: 15,
+    spotlightPadding: 10,
+    tabValue: 'account',
   },
   {
     id: 8,
@@ -128,9 +136,22 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 150,
     spotlightShape: 'rectangle',
     spotlightPadding: 10,
+    tabValue: 'all',
   },
   {
     id: 10,
+    target: '[data-tutorial="alerts-tabs"]',
+    title: '내 처리 건',
+    page: 'alerts',
+    description: '내가 담당하고 있는 처리 건만 확인할 수 있습니다.',
+    position: 'left',
+    spotlightRadius: 150,
+    spotlightShape: 'rectangle',
+    spotlightPadding: 10,
+    tabValue: 'personal',
+  },
+  {
+    id: 11,
     target: '[data-tutorial="about-nav"]',
     title: '프로그램 정보',
     page: 'about',
@@ -141,7 +162,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightPadding: 10,
   },
   {
-    id: 11,
+    id: 12,
     target: '[data-tutorial="about-page"]',
     title: '프로그램 정보 및 업데이트',
     page: 'about',
@@ -152,7 +173,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightPadding: 20,
   },
   {
-    id: 12,
+    id: 13,
     target: '[data-tutorial="settings-page"]',
     title: '튜토리얼 완료!',
     page: 'settings',
@@ -162,6 +183,7 @@ const tutorialSteps: TutorialStep[] = [
     spotlightRadius: 0,
     spotlightShape: 'rectangle',
     spotlightPadding: 0,
+    tabValue: 'account',
   },
 ];
 

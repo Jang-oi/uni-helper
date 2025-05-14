@@ -51,6 +51,22 @@ export function TutorialOverlay() {
     setTargetFound(false);
   }, [isActive, currentStep, currentStepData, navigate]);
 
+  // 탭 변경 처리
+  useEffect(() => {
+    if (!isActive || !currentStepData || !currentStepData.tabValue) return;
+
+    // 탭 변경이 필요한 경우
+    try {
+      // @ts-ignore - 전역 함수 호출
+      if (window.__changeSettingsTab) {
+        // @ts-ignore
+        window.__changeSettingsTab(currentStepData.tabValue);
+      }
+    } catch (error) {
+      console.error('탭 변경 중 오류 발생:', error);
+    }
+  }, [isActive, currentStep, currentStepData]);
+
   // 타겟 요소 찾기 및 위치 계산
   useEffect(() => {
     if (!isActive || !currentStepData || targetFound) return;
@@ -86,7 +102,7 @@ export function TutorialOverlay() {
 
         switch (currentStepData.position) {
           case 'top':
-            cardTop = rect.top - 250;
+            cardTop = rect.top - 200;
             cardLeft = rect.left + rect.width / 2 - 150;
             break;
           case 'right':
@@ -113,7 +129,7 @@ export function TutorialOverlay() {
         setTargetFound(true);
       } else {
         // 요소를 찾지 못한 경우 0.5초 후 다시 시도
-        const timerId = setTimeout(findTargetElement, 500);
+        const timerId = setTimeout(findTargetElement, 1);
         return () => clearTimeout(timerId);
       }
     };
@@ -132,6 +148,24 @@ export function TutorialOverlay() {
     }
   }, [targetFound]);
 
+  // 키보드 단축키 처리
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isActive) return;
+
+      if (e.key === 'Escape') {
+        endTutorial();
+      } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+        nextStep();
+      } else if (e.key === 'ArrowLeft') {
+        prevStep();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isActive, nextStep, prevStep, endTutorial]);
+
   // 튜토리얼이 활성화되지 않은 경우 렌더링하지 않음
   if (!isActive || !currentStepData) return null;
 
@@ -148,7 +182,7 @@ export function TutorialOverlay() {
         (currentStepData.spotlightShape === 'rectangle' ? (
           // 사각형 스포트라이트
           <div
-            className="absolute pointer-events-none"
+            className="absolute pointer-events-auto"
             style={{
               top: spotlightPosition.top - (currentStepData.spotlightPadding || 5),
               left: spotlightPosition.left - (currentStepData.spotlightPadding || 5),
@@ -157,12 +191,13 @@ export function TutorialOverlay() {
               boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.75)',
               borderRadius: '4px',
               backgroundColor: 'transparent',
+              zIndex: 51,
             }}
           />
         ) : (
           // 원형 스포트라이트 (기본값)
           <div
-            className="absolute rounded-full pointer-events-none"
+            className="absolute pointer-events-auto"
             style={{
               top: spotlightPosition.top - (currentStepData.spotlightRadius || 100) / 2 + spotlightPosition.height / 2,
               left: spotlightPosition.left - (currentStepData.spotlightRadius || 100) / 2 + spotlightPosition.width / 2,
@@ -171,19 +206,20 @@ export function TutorialOverlay() {
               boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.75)',
               borderRadius: '50%',
               backgroundColor: 'transparent',
+              zIndex: 51,
             }}
           />
         ))}
 
       {/* 튜토리얼 카드 */}
       <Card
-        className={`absolute pointer-events-auto shadow-lg ${isLastStep ? 'w-[400px]' : 'w-[300px]'}`}
+        className={`absolute pointer-events-auto shadow-lg z-[52] ${isLastStep ? 'w-[400px]' : 'w-[300px]'} bg-background border-border`}
         style={{ top: overlayPosition.top, left: overlayPosition.left }}
       >
         <CardHeader className="pb-2">
           <div className="flex justify-between items-center">
-            <CardTitle className="text-lg">{currentStepData.title}</CardTitle>
-            <Button variant="ghost" size="icon" onClick={endTutorial} className="h-6 w-6">
+            <CardTitle className="text-lg text-foreground">{currentStepData.title}</CardTitle>
+            <Button variant="ghost" size="icon" onClick={endTutorial} className="h-6 w-6 text-foreground">
               <X className="h-4 w-4" />
             </Button>
           </div>
