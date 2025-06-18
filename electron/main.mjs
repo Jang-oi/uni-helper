@@ -11,6 +11,19 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow, tray;
 
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized() || !mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -70,7 +83,7 @@ const createTray = () => {
   });
 };
 
-app.whenReady().then(() => {
+app.on('ready', () => {
   // IPC 핸들러 등록
   registerIpcHandlers();
   createTray();
