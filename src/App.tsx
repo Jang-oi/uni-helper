@@ -10,17 +10,14 @@ import { ElectronErrorModal } from '@/components/electron-error-modal';
 import { SiteHeader } from '@/components/layout/site-header.tsx';
 import { LoadingOverlay } from '@/components/loading-overlay';
 import { ThemeProvider } from '@/components/theme-provider';
-import { TutorialOverlay } from '@/components/tutorial-overlay.tsx';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar.tsx';
 import { Toaster } from '@/components/ui/sonner';
 import { UniAlertDialog } from '@/components/uni-alert-dialog';
 
 import { useAppStore } from '@/store/app-store';
-import { useTutorialStore } from '@/store/tutorial-store';
 
 export function App() {
   const { isLoading, loadingMessage, setElectronAvailable, syncMonitoringStatus } = useAppStore();
-  const { isActive, completedTutorial } = useTutorialStore();
   const [showElectronError, setShowElectronError] = useState(false);
   const [checkCount, setCheckCount] = useState(0);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -55,13 +52,6 @@ export function App() {
     checkElectronAvailability();
   }, [checkCount, setElectronAvailable]);
 
-  // 튜토리얼 완료 상태 저장
-  useEffect(() => {
-    if (completedTutorial) {
-      localStorage.setItem('tutorial-completed', 'true');
-    }
-  }, [completedTutorial]);
-
   // 앱 새로고침 함수
   const handleReload = () => {
     if (typeof window !== 'undefined') {
@@ -89,7 +79,6 @@ export function App() {
             </main>
           </SidebarInset>
           <Toaster position="top-right" richColors />
-          {isActive && <TutorialOverlay />}
         </SidebarProvider>
       </HashRouter>
     </ThemeProvider>

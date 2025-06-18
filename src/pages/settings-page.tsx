@@ -206,7 +206,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full settings-tabs" ref={tabsRef}>
-        <TabsList className="grid grid-cols-3 mb-6">
+        <TabsList className="grid grid-cols-2 mb-6">
           <TabsTrigger value="account" className="flex items-center gap-2" data-tutorial="account-tab">
             <User className="h-4 w-4" />
             <span>계정 정보</span>
@@ -215,10 +215,10 @@ export function SettingsPage() {
             <Bell className="h-4 w-4" />
             <span>알림 설정</span>
           </TabsTrigger>
-          <TabsTrigger value="system" className="flex items-center gap-2" data-tutorial="system-tab">
+          {/*          <TabsTrigger value="system" className="flex items-center gap-2" data-tutorial="system-tab">
             <Laptop className="h-4 w-4" />
             <span>시스템 설정</span>
-          </TabsTrigger>
+          </TabsTrigger>*/}
         </TabsList>
 
         <Form {...form}>
@@ -377,6 +377,7 @@ export function SettingsPage() {
                     </div>
                     <FormControl>
                       <Switch
+                        disabled={true}
                         className="cursor-pointer"
                         checked={field.value}
                         onCheckedChange={async (checked) => {
