@@ -544,10 +544,8 @@ function formatRequestData(item) {
 function displayNotifications(alerts) {
   // 설정에서 알림 활성화 여부 확인
   const settings = store.get('settings') || {};
-  const enableNotifications = settings.enableNotifications !== false; // 기본값은 true
-
   // 알림이 비활성화되어 있으면 표시하지 않음
-  if (!enableNotifications) return;
+  if (!settings.enableNotifications) return;
 
   // 오래된 알림 참조 정리 (2분 이상 지난 알림)
   const now = Date.now();
@@ -573,6 +571,7 @@ function displayNotifications(alerts) {
 
     notification.on('click', async () => {
       await openUniPost(alert.SR_IDX);
+      if (mainWindow && process.platform === 'win32') mainWindow.flashFrame(false);
     });
     // 알림 표시
     notification.show();
@@ -580,6 +579,9 @@ function displayNotifications(alerts) {
     // 활성 알림 배열에 추가
     activeNotifications.push(notificationObj);
   });
+
+  // Windows에서만 작업 표시줄 아이콘 깜빡임 시작
+  if (mainWindow && process.platform === 'win32') mainWindow.flashFrame(true);
 
   // 알림 객체 정리를 위한 타이머 설정 (30초 후)
   setTimeout(() => {

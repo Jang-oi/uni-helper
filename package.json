@@ -1,7 +1,7 @@
 {
   "name": "uni-helper-app",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Internal work monitoring application",
   "type": "module",
   "main": "electron/main.mjs",

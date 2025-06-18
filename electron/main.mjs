@@ -56,7 +56,7 @@ async function createWindow() {
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
       event.preventDefault(); // 창 닫기 방지
-      mainWindow.hide(); // 대신 창 숨김
+      mainWindow.minimize(); // 대신 창 숨김
     }
   });
 
@@ -88,7 +88,7 @@ app.on('ready', () => {
   registerIpcHandlers();
   createTray();
   createWindow();
-  app.setAppUserModelId('uni-helper-app');
+  app.setAppUserModelId('com.unipost.helper.app');
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
