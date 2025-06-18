@@ -28,7 +28,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 900,
-    icon: path.join(__dirname, 'favicon.ico'),
+    icon: path.join(__dirname, '256_favicon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: true,
@@ -64,7 +64,7 @@ async function createWindow() {
 }
 
 const createTray = () => {
-  tray = new Tray(path.join(__dirname, 'favicon.ico'));
+  tray = new Tray(path.join(__dirname, '256_favicon.ico'));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '종료',

@@ -100,7 +100,7 @@
     "asar": false,
     "win": {
       "target": "nsis",
-      "icon": "./electron/favicon.ico",
+      "icon": "./electron/256_favicon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
