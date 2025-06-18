@@ -581,7 +581,7 @@ function displayNotifications(alerts) {
   });
 
   // Windows에서만 작업 표시줄 아이콘 깜빡임 시작
-  if (mainWindow && process.platform === 'win32') mainWindow.flashFrame(true);
+  if (mainWindow && alerts.length > 0 && process.platform === 'win32') mainWindow.flashFrame(true);
 
   // 알림 객체 정리를 위한 타이머 설정 (30초 후)
   setTimeout(() => {

@@ -1,7 +1,7 @@
 {
   "name": "uni-helper-app",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Internal work monitoring application",
   "type": "module",
   "main": "electron/main.mjs",
@@ -100,7 +100,7 @@
     "asar": false,
     "win": {
       "target": "nsis",
-      "icon": "./electron/256_favicon.ico",
+      "icon": "./electron/favicon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
