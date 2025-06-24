@@ -84,19 +84,13 @@
     "appId": "com.unipost.helper.app",
     "productName": "uni-helper-app",
     "files": [
-      "electron/**/*",
+      "electron/*",
       "build/**/*"
     ],
     "directories": {
       "output": "dist",
       "buildResources": "electron"
     },
-    "extraResources": [
-      {
-        "from": "build",
-        "to": "build"
-      }
-    ],
     "asar": false,
     "win": {
       "target": "nsis",

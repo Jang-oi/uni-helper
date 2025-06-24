@@ -29,7 +29,7 @@ const activeNotifications = [];
 export function setMainWindow(window) {
   mainWindow = window;
 
-  // 자동 업데이트 이벤트 설정
+  registerIpcHandlers();
   setupAutoUpdater();
 }
 
@@ -66,6 +66,141 @@ function setupAutoUpdater() {
   });
 }
 
+// IPC 핸들러 등록
+function registerIpcHandlers() {
+  function getAlerts() {
+    try {
+      // 저장된 모든 알림 가져오기
+      const allAlerts = store.get('alerts') || [];
+      const personalRequests = store.get('personalRequests') || [];
+      // 마지막 확인 시간
+      const lastChecked = store.get('lastChecked') || null;
+
+      return { success: true, alerts: allAlerts, personalRequests, lastChecked };
+    } catch (error) {
+      console.error('알림 목록 조회 중 오류:', error);
+      return { success: false, error: error.toString() };
+    }
+  }
+
+  // 현재 모니터링 상태 확인 함수
+  function getMonitoringStatus() {
+    return {
+      isMonitoring,
+      monitoringPaused: store.get('monitoringPaused') || false,
+      lastChecked: store.get('lastChecked') || null,
+    };
+  }
+
+  // 시작 프로그램 설정 함수
+  function setStartupProgram(enable) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: enable });
+
+      return { success: true, message: enable ? '시작 프로그램에 등록되었습니다.' : '시작 프로그램에서 제거되었습니다.' };
+    } catch (error) {
+      console.error('시작 프로그램 설정 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  }
+
+  // 현재 시작 프로그램 설정 상태 확인
+  function getStartupStatus() {
+    try {
+      const status = app.getLoginItemSettings();
+      return { success: true, openAtLogin: status.openAtLogin };
+    } catch (error) {
+      console.error('시작 프로그램 상태 확인 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  }
+
+  // 설정 관련 핸들러
+  ipcMain.handle('get-settings', async () => {
+    const settings = store.get('settings') || {};
+    // 시작 프로그램 상태 확인 및 추가
+    const startupStatus = getStartupStatus();
+    if (startupStatus.success) {
+      settings.startAtLogin = startupStatus.openAtLogin;
+    }
+    return settings;
+  });
+
+  // 모니터링 상태 확인 핸들러 추가
+  ipcMain.handle('get-monitoring-status', () => {
+    return getMonitoringStatus();
+  });
+
+  ipcMain.handle('save-settings', async (event, settings) => {
+    try {
+      // 시작 프로그램 설정 적용
+      if (settings.hasOwnProperty('startAtLogin')) setStartupProgram(settings.startAtLogin);
+
+      store.set('settings', settings);
+      return { success: true };
+    } catch (error) {
+      console.error('설정 저장 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  // 모니터링 관련 핸들러
+  ipcMain.handle('toggle-monitoring', async (event, status) => {
+    if (status) return startMonitoring();
+    else return stopMonitoring();
+  });
+
+  // 요청 상세 보기 핸들러
+  ipcMain.handle('open-request', async (event, srIdx) => {
+    try {
+      await openUniPost(srIdx);
+      return { success: true };
+    } catch (error) {
+      console.error('요청 상세 보기 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  ipcMain.handle('get-alerts', getAlerts);
+
+  // 앱 정보 핸들러
+  ipcMain.handle('get-app-info', () => {
+    return { version: app.getVersion() };
+  });
+
+  // 업데이트 관련 핸들러
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 확인 중 오류:', error);
+      sendUpdateStatus('error', { error: error.toString() });
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  ipcMain.handle('download-update', async () => {
+    try {
+      autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 다운로드 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+
+  ipcMain.handle('install-update', () => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (error) {
+      console.error('업데이트 설치 중 오류:', error);
+      return { success: false, message: error.toString() };
+    }
+  });
+}
+
 // 업데이트 상태 전송 함수
 function sendUpdateStatus(status, data = {}) {
   if (mainWindow) mainWindow.webContents.send('update-status', { status, ...data });
@@ -73,23 +208,6 @@ function sendUpdateStatus(status, data = {}) {
 
 // 외부 링크 열기
 const openUniPost = async (srIdx) => {
-  /*// 로그인용 브라우저 창 생성
-  const supportWindow = new BrowserWindow({
-    width: 1600,
-    height: 900,
-    icon: path.join(__dirname, 'favicon.ico'),
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.mjs'),
-    },
-    autoHideMenuBar: true,
-    show: true,
-    resizable: false,
-    center: true,
-  });
-
-  await supportWindow.loadURL(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);*/
   await shell.openExternal(`${SUPPORT_URL}?access=list&srIdx=${srIdx}`);
 };
 
@@ -131,6 +249,7 @@ async function pauseMonitoring() {
   }
 
   isMonitoring = false;
+  isLoggedIn = false;
   store.set('monitoringPaused', true); // 일시 중지 상태 저장
 }
 
@@ -263,13 +382,6 @@ async function checkLoginSession(window) {
 
 // 데이터 스크래핑 함수
 async function scrapeDataFromSite() {
-  // 업무 시간 체크
-  if (!isBusinessHours()) {
-    console.log('업무 시간이 아니므로 스크래핑 건너뜀');
-    isLoggedIn = false;
-    return { success: false, message: '업무 시간이 아닙니다', allRequests: [], personalRequests: [] };
-  }
-
   const { success, message } = await ensureLoggedIn();
   if (!success) {
     console.error('데이터 스크래핑을 위한 로그인 실패');
@@ -336,7 +448,6 @@ async function scrapeDataFromSite() {
           const grid = iframe.contentWindow.grid;
           const allRequestsData = grid.getAllRowValue();
           
-          // Second search: Get current user's requests
           const currentUsername = document.querySelector('.userNm').textContent.trim();
           iframe.contentWindow.UNIUX.SVC('RECEIPT_INFO_SEARCH_TYPE', 'P');
           iframe.contentWindow.UNIUX.SVC('RECEIPT_INFO_TEXT', currentUsername);
@@ -456,6 +567,7 @@ async function checkForNewRequests() {
     const withinBusinessHours = await checkBusinessHours();
 
     if (!withinBusinessHours) {
+      isLoggedIn = false;
       console.log('업무 시간이 아니므로 모니터링 건너뜀');
       return { success: false, message: '업무 시간이 아닙니다' };
     }
@@ -478,16 +590,12 @@ async function checkForNewRequests() {
     const existingAlerts = store.get('alerts') || [];
     // 모든 요청 데이터 형식화
     const formattedAllRequests = allRequests.map(formatRequestData);
-    // 사용자 개인 요청 데이터 형식화
-    const formattedPersonalRequests = personalRequests.map(formatRequestData);
-
-    // 새 알림만 필터링
     // 새 알림 찾기 - 기존 알림에 없는 SR_IDX를 가진 항목들
     const newAlerts = formattedAllRequests.filter(
       (newAlert) => !existingAlerts.some((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX),
     );
 
-    // 상태가 변경된 알림 찾기 (특히 고객사답변으로 변경된 경우)
+    // 상태가 변경된 알림 찾기 (고객사답변으로 변경된 경우)
     const statusChangedAlerts = formattedAllRequests.filter((newAlert) => {
       const existingAlert = existingAlerts.find((existingAlert) => existingAlert.SR_IDX === newAlert.SR_IDX);
 
@@ -560,7 +668,7 @@ function displayNotifications(alerts) {
     const notification = new Notification({
       title: `${alert.CM_NAME}`,
       body: `${alert.REQ_TITLE}\n상태: ${alert.STATUS}\n`,
-      icon: path.join(__dirname, '256_favicon.ico'),
+      icon: path.join(__dirname, 'favicon.ico'),
     });
     // 생성 시간과 참조하는 SR_IDX 저장
     const notificationObj = {
@@ -620,6 +728,7 @@ async function startMonitoring() {
 
   if (!withinBusinessHours) {
     // 업무 시간이 아니면 일시 중지 상태로 저장하고 다음 업무 시간에 자동 시작
+    isLoggedIn = false;
     store.set('monitoringPaused', true);
     return { success: false, message: '업무 시간(07:00~20:00)이 아닙니다. 다음 업무 시간에 시작 해주세요.' };
   }
@@ -665,139 +774,4 @@ function stopMonitoring() {
   store.delete('monitoringPaused'); // 일시 중지 상태 제거
 
   return { success: true, message: '모니터링이 중지되었습니다.' };
-}
-
-function getAlerts() {
-  try {
-    // 저장된 모든 알림 가져오기
-    const allAlerts = store.get('alerts') || [];
-    const personalRequests = store.get('personalRequests') || [];
-    // 마지막 확인 시간
-    const lastChecked = store.get('lastChecked') || null;
-
-    return { success: true, alerts: allAlerts, personalRequests, lastChecked };
-  } catch (error) {
-    console.error('알림 목록 조회 중 오류:', error);
-    return { success: false, error: error.toString() };
-  }
-}
-
-// 현재 모니터링 상태 확인 함수
-function getMonitoringStatus() {
-  return {
-    isMonitoring,
-    monitoringPaused: store.get('monitoringPaused') || false,
-    lastChecked: store.get('lastChecked') || null,
-  };
-}
-
-// 시작 프로그램 설정 함수
-function setStartupProgram(enable) {
-  try {
-    app.setLoginItemSettings({ openAtLogin: enable });
-
-    return { success: true, message: enable ? '시작 프로그램에 등록되었습니다.' : '시작 프로그램에서 제거되었습니다.' };
-  } catch (error) {
-    console.error('시작 프로그램 설정 중 오류:', error);
-    return { success: false, message: error.toString() };
-  }
-}
-
-// 현재 시작 프로그램 설정 상태 확인
-function getStartupStatus() {
-  try {
-    const status = app.getLoginItemSettings();
-    return { success: true, openAtLogin: status.openAtLogin };
-  } catch (error) {
-    console.error('시작 프로그램 상태 확인 중 오류:', error);
-    return { success: false, message: error.toString() };
-  }
-}
-
-// IPC 핸들러 등록
-export function registerIpcHandlers() {
-  // 설정 관련 핸들러
-  ipcMain.handle('get-settings', async () => {
-    const settings = store.get('settings') || {};
-    // 시작 프로그램 상태 확인 및 추가
-    const startupStatus = getStartupStatus();
-    if (startupStatus.success) {
-      settings.startAtLogin = startupStatus.openAtLogin;
-    }
-    return settings;
-  });
-
-  // 모니터링 상태 확인 핸들러 추가
-  ipcMain.handle('get-monitoring-status', () => {
-    return getMonitoringStatus();
-  });
-
-  ipcMain.handle('save-settings', async (event, settings) => {
-    try {
-      // 시작 프로그램 설정 적용
-      if (settings.hasOwnProperty('startAtLogin')) setStartupProgram(settings.startAtLogin);
-
-      store.set('settings', settings);
-      return { success: true };
-    } catch (error) {
-      console.error('설정 저장 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  // 모니터링 관련 핸들러
-  ipcMain.handle('toggle-monitoring', async (event, status) => {
-    if (status) return startMonitoring();
-    else return stopMonitoring();
-  });
-
-  // 요청 상세 보기 핸들러
-  ipcMain.handle('open-request', async (event, srIdx) => {
-    try {
-      await openUniPost(srIdx);
-      return { success: true };
-    } catch (error) {
-      console.error('요청 상세 보기 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  ipcMain.handle('get-alerts', getAlerts);
-
-  // 앱 정보 핸들러
-  ipcMain.handle('get-app-info', () => {
-    return { version: app.getVersion() };
-  });
-
-  // 업데이트 관련 핸들러
-  ipcMain.handle('check-for-updates', async () => {
-    try {
-      await autoUpdater.checkForUpdates();
-      return { success: true };
-    } catch (error) {
-      console.error('업데이트 확인 중 오류:', error);
-      sendUpdateStatus('error', { error: error.toString() });
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  ipcMain.handle('download-update', async () => {
-    try {
-      autoUpdater.downloadUpdate();
-      return { success: true };
-    } catch (error) {
-      console.error('업데이트 다운로드 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
-
-  ipcMain.handle('install-update', () => {
-    try {
-      autoUpdater.quitAndInstall(false, true);
-      return { success: true };
-    } catch (error) {
-      console.error('업데이트 설치 중 오류:', error);
-      return { success: false, message: error.toString() };
-    }
-  });
 }

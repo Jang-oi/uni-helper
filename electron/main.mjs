@@ -3,7 +3,7 @@ import electronLocalShortcut from 'electron-localshortcut';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { registerIpcHandlers, setMainWindow } from './ipc-handler.js';
+import { setMainWindow } from './ipc-handler.js';
 
 // ES 모듈에서는 __dirname이 없으므로 직접 생성
 const __filename = fileURLToPath(import.meta.url);
@@ -28,7 +28,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 900,
-    icon: path.join(__dirname, '256_favicon.ico'),
+    icon: path.join(__dirname, 'favicon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: true,
@@ -64,7 +64,7 @@ async function createWindow() {
 }
 
 const createTray = () => {
-  tray = new Tray(path.join(__dirname, '256_favicon.ico'));
+  tray = new Tray(path.join(__dirname, 'favicon.ico'));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '종료',
@@ -84,8 +84,6 @@ const createTray = () => {
 };
 
 app.on('ready', () => {
-  // IPC 핸들러 등록
-  registerIpcHandlers();
   createTray();
   createWindow();
   app.setAppUserModelId('com.unipost.helper.app');
