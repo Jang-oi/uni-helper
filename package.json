@@ -1,7 +1,7 @@
 {
   "name": "uni-helper-app",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Internal work monitoring application",
   "type": "module",
   "main": "electron/main.mjs",
@@ -85,7 +85,8 @@
     "productName": "uni-helper-app",
     "files": [
       "electron/*",
-      "build/**/*"
+      "build/**/*",
+      "electron/256_favicon.ico"
     ],
     "directories": {
       "output": "dist",
