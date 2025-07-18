@@ -668,7 +668,7 @@ function displayNotifications(alerts) {
     const notification = new Notification({
       title: `${alert.CM_NAME}`,
       body: `${alert.REQ_TITLE}\n상태: ${alert.STATUS}\n`,
-      icon: path.join(__dirname, 'favicon.ico'),
+      icon: path.join(__dirname, 'assets', 'icon.ico'),
     });
     // 생성 시간과 참조하는 SR_IDX 저장
     const notificationObj = {

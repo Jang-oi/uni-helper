@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow, tray;
 
+app.setAppUserModelId('com.unipost.helper.app');
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -28,7 +29,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 900,
-    icon: path.join(__dirname, '256_favicon.ico'),
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: true,
@@ -64,7 +65,7 @@ async function createWindow() {
 }
 
 const createTray = () => {
-  tray = new Tray(path.join(__dirname, '256_favicon.ico'));
+  tray = new Tray(path.join(__dirname, 'assets', 'icon.ico'));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '종료',
@@ -86,7 +87,6 @@ const createTray = () => {
 app.on('ready', () => {
   createTray();
   createWindow();
-  app.setAppUserModelId('com.unipost.helper.app');
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

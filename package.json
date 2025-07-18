@@ -1,7 +1,7 @@
 {
   "name": "uni-helper-app",
   "private": true,
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Internal work monitoring application",
   "type": "module",
   "main": "electron/main.mjs",
@@ -84,9 +84,8 @@
     "appId": "com.unipost.helper.app",
     "productName": "uni-helper-app",
     "files": [
-      "electron/*",
-      "build/**/*",
-      "electron/256_favicon.ico"
+      "electron/**/*",
+      "build/**/*"
     ],
     "directories": {
       "output": "dist",
@@ -95,7 +94,7 @@
     "asar": false,
     "win": {
       "target": "nsis",
-      "icon": "./electron/256_favicon.ico",
+      "icon": "electron/assets/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
